@@ -21,14 +21,14 @@ class hysen(Device):
 
     TYPE = "HYS"
 
-    def send_request(self, request: Sequence[int]) -> bytes:
+    async def send_request(self, request: Sequence[int]) -> bytes:
         """Send a request to the device."""
         packet = bytearray()
         packet.extend((len(request) + 2).to_bytes(2, "little"))
         packet.extend(request)
         packet.extend(CRC16.calculate(request).to_bytes(2, "little"))
 
-        response = self.send_packet(0x6A, packet)
+        response = await self.send_packet(0x6A, packet)
         e.check_error(response[0x22:0x24])
         payload = self.decrypt(response[0x38:])
 
@@ -52,22 +52,22 @@ class hysen(Device):
         offset = (offset_raw_value + 1) / 10 if add_offset else 0.0
         return base_temp + offset
 
-    def get_temp(self) -> float:
+    async def get_temp(self) -> float:
         """Return the room temperature in degrees celsius."""
-        payload = self.send_request([0x01, 0x03, 0x00, 0x00, 0x00, 0x08])
+        payload = await self.send_request([0x01, 0x03, 0x00, 0x00, 0x00, 0x08])
         return self._decode_temp(payload, 5)
 
-    def get_external_temp(self) -> float:
+    async def get_external_temp(self) -> float:
         """Return the external temperature in degrees celsius."""
-        payload = self.send_request([0x01, 0x03, 0x00, 0x00, 0x00, 0x08])
+        payload = await self.send_request([0x01, 0x03, 0x00, 0x00, 0x00, 0x08])
         return self._decode_temp(payload, 18)
 
-    def get_full_status(self) -> dict:
+    async def get_full_status(self) -> dict:
         """Return the state of the device.
 
         Timer schedule included.
         """
-        payload = self.send_request([0x01, 0x03, 0x00, 0x00, 0x00, 0x16])
+        payload = await self.send_request([0x01, 0x03, 0x00, 0x00, 0x00, 0x16])
         data = {}
         data["remote_lock"] = payload[3] & 1
         data["power"] = payload[4] & 1
@@ -127,12 +127,12 @@ class hysen(Device):
     # E.g. loop_mode = 0 ("12345,67") means Saturday and Sunday (weekend schedule)
     # loop_mode = 2 ("1234567") means every day, including Saturday and Sunday (weekday schedule)
     # The sensor command is currently experimental
-    def set_mode(
+    async def set_mode(
         self, auto_mode: int, loop_mode: int, sensor: int = 0
     ) -> None:
         """Set the mode of the device."""
         mode_byte = ((loop_mode + 1) << 4) + auto_mode
-        self.send_request([0x01, 0x06, 0x00, 0x02, mode_byte, sensor])
+        await self.send_request([0x01, 0x06, 0x00, 0x02, mode_byte, sensor])
 
     # Advanced settings
     # Sensor mode (SEN) sensor = 0 for internal sensor, 1 for external sensor,
@@ -145,7 +145,7 @@ class hysen(Device):
     # Anti-freezing function (FrE) fre = 0 for anti-freezing function shut down,
     #  1 for anti-freezing function open. Factory default: 0
     # Power on memory (POn) poweron = 0 for off, 1 for on. Default: 0
-    def set_advanced(
+    async def set_advanced(
         self,
         loop_mode: int,
         sensor: int,
@@ -158,7 +158,7 @@ class hysen(Device):
         poweron: int,
     ) -> None:
         """Set advanced options."""
-        self.send_request(
+        await self.send_request(
             [
                 0x01,
                 0x10,
@@ -182,34 +182,34 @@ class hysen(Device):
 
     # For backwards compatibility only.  Prefer calling set_mode directly.
     # Note this function invokes loop_mode=0 and sensor=0.
-    def switch_to_auto(self) -> None:
+    async def switch_to_auto(self) -> None:
         """Switch mode to auto."""
-        self.set_mode(auto_mode=1, loop_mode=0)
+        await self.set_mode(auto_mode=1, loop_mode=0)
 
-    def switch_to_manual(self) -> None:
+    async def switch_to_manual(self) -> None:
         """Switch mode to manual."""
-        self.set_mode(auto_mode=0, loop_mode=0)
+        await self.set_mode(auto_mode=0, loop_mode=0)
 
     # Set temperature for manual mode (also activates manual mode if currently in automatic)
-    def set_temp(self, temp: float) -> None:
+    async def set_temp(self, temp: float) -> None:
         """Set the target temperature."""
-        self.send_request([0x01, 0x06, 0x00, 0x01, 0x00, int(temp * 2)])
+        await self.send_request([0x01, 0x06, 0x00, 0x01, 0x00, int(temp * 2)])
 
     # Set device on(1) or off(0), does not deactivate Wifi connectivity.
     # Remote lock disables control by buttons on thermostat.
     # heating_cooling: heating(0) cooling(1)
-    def set_power(
+    async def set_power(
         self, power: int = 1, remote_lock: int = 0, heating_cooling: int = 0
     ) -> None:
         """Set the power state of the device."""
         state = (heating_cooling << 7) + power
-        self.send_request([0x01, 0x06, 0x00, 0x00, remote_lock, state])
+        await self.send_request([0x01, 0x06, 0x00, 0x00, remote_lock, state])
 
     # set time on device
     # n.b. day=1 is Monday, ..., day=7 is Sunday
-    def set_time(self, hour: int, minute: int, second: int, day: int) -> None:
+    async def set_time(self, hour: int, minute: int, second: int, day: int) -> None:
         """Set the time."""
-        self.send_request(
+        await self.send_request(
             [
                 0x01,
                 0x10,
@@ -231,7 +231,7 @@ class hysen(Device):
     # {'start_hour':17, 'start_minute':30, 'temp': 22 }
     # Each one specifies the thermostat temp that will become effective at start_hour:start_minute
     # weekend is similar but only has 2 (e.g. switch on in morning and off in afternoon)
-    def set_schedule(self, weekday: List[dict], weekend: List[dict]) -> None:
+    async def set_schedule(self, weekday: List[dict], weekend: List[dict]) -> None:
         """Set timer schedule."""
         request = [0x01, 0x10, 0x00, 0x0A, 0x00, 0x0C, 0x18]
 
@@ -253,7 +253,7 @@ class hysen(Device):
         for i in range(0, 2):
             request.append(int(weekend[i]["temp"] * 2))
 
-        self.send_request(request)
+        await self.send_request(request)
 
 
 class hvac(Device):
@@ -343,11 +343,11 @@ class hvac(Device):
         d_len = int.from_bytes(payload[0x08:0x0A], "little")
         return payload[0x0A:0x0A+d_len]
 
-    def _send(self, command: int, data: bytes = b"") -> bytes:
+    async def _send(self, command: int, data: bytes = b"") -> bytes:
         """Send a command to the unit."""
         prefix = bytes([((command << 4) | 1), 1])
         packet = self._encode(prefix + data)
-        response = self.send_packet(0x6A, packet)
+        response = await self.send_packet(0x6A, packet)
         e.check_error(response[0x22:0x24])
         return self._decode(response)[0x02:]
 
@@ -369,7 +369,7 @@ class hvac(Device):
         state["mildew"] = bool(data[0x0A] & 1 << 3)
         return state
 
-    def set_state(
+    async def set_state(
         self,
         power: bool,
         target_temp: float,  # 16<=target_temp<=32
@@ -414,10 +414,10 @@ class hvac(Device):
         data[0x0A] = display << 4 | mildew << 3
         data[0x0C] = UNK2
 
-        resp = self._send(0, data)
+        resp = await self._send(0, data)
         return self._parse_state(resp)
 
-    def get_state(self) -> dict:
+    async def get_state(self) -> dict:
         """Returns a dictionary with the unit's parameters.
 
         Returns:
@@ -436,7 +436,7 @@ class hvac(Device):
                 clean (bool):
                 mildew (bool):
         """
-        resp = self._send(1)
+        resp = await self._send(1)
 
         if len(resp) < 13:
             raise e.DataValidationError(
@@ -447,7 +447,7 @@ class hvac(Device):
 
         return self._parse_state(resp)
 
-    def get_ac_info(self) -> dict:
+    async def get_ac_info(self) -> dict:
         """Returns dictionary with AC info.
 
         Returns:
@@ -455,7 +455,7 @@ class hvac(Device):
                 power (bool): power
                 ambient_temp (float): ambient temperature
         """
-        resp = self._send(2)
+        resp = await self._send(2)
 
         if len(resp) < 22:
             raise e.DataValidationError(

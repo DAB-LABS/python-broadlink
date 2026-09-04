@@ -14,11 +14,11 @@ class S1C(Device):
         0x21: "Motion Sensor",
     }
 
-    def get_sensors_status(self) -> dict:
+    async def get_sensors_status(self) -> dict:
         """Return the state of the sensors."""
         packet = bytearray(16)
         packet[0] = 0x06
-        response = self.send_packet(0x6A, packet)
+        response = await self.send_packet(0x6A, packet)
         e.check_error(response[0x22:0x24])
         payload = self.decrypt(response[0x38:])
         count = payload[0x4]

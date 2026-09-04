@@ -7,6 +7,7 @@ be exercised with corrupted frames.
 
 from __future__ import annotations
 
+import asyncio
 import socket
 
 import pytest
@@ -21,60 +22,65 @@ INIT_KEY = bytes.fromhex("097628343fe99e23765c1513accf8b02")
 INIT_VECT = bytes.fromhex("562e17996d093d28ddb3ba695a2e6f58")
 
 
-class FakeSocket:
-    """A UDP socket stand-in: records sendto, replays canned recvfrom."""
+class FakeTransport:
+    """Datagram transport stand-in: records sendto, feeds canned replies."""
 
-    instances: list["FakeSocket"] = []
-
-    def __init__(self, *args, **kwargs):
-        self.sent: list[tuple[bytes, tuple[str, int]]] = []
-        self.inbox: list[tuple[bytes, tuple[str, int]]] = list(FakeSocket.queue)
-        self.timeout = None
+    def __init__(self, protocol, local_addr, remote_addr, broadcast, replies):
+        self.protocol = protocol
+        self.local_addr = local_addr or ("0.0.0.0", 0)
+        self.remote_addr = remote_addr
+        self.broadcast = broadcast
+        self.replies = list(replies)
+        self.sent: list[tuple[bytes, tuple[str, int] | None]] = []
         self.closed = False
-        self.bound = None
-        FakeSocket.instances.append(self)
 
-    queue: list[tuple[bytes, tuple[str, int]]] = []
+    def sendto(self, data, addr=None):
+        self.sent.append((bytes(data), addr or self.remote_addr))
+        # Each send releases the next canned reply, if any, exactly like a
+        # device answering one request.
+        if self.replies:
+            self.protocol.queue.put_nowait(self.replies.pop(0))
 
-    def setsockopt(self, *args):
-        pass
+    def get_extra_info(self, name):
+        if name == "sockname":
+            return (self.local_addr[0], self.local_addr[1] or 40000)
+        return None
 
-    def settimeout(self, value):
-        self.timeout = value
-
-    def bind(self, addr):
-        self.bound = addr
-
-    def getsockname(self):
-        return self.bound or ("0.0.0.0", 0)
-
-    def sendto(self, data, addr):
-        self.sent.append((bytes(data), addr))
-
-    def recvfrom(self, size):
-        if not self.inbox:
-            raise socket.timeout()
-        return self.inbox.pop(0)
+    def is_closing(self):
+        return self.closed
 
     def close(self):
         self.closed = True
 
-    def __enter__(self):
-        return self
 
-    def __exit__(self, *exc):
-        self.close()
+class FakeNet:
+    """Replacement for broadlink.device._open_endpoint."""
+
+    def __init__(self):
+        self.replies: list[tuple[bytes, tuple[str, int]]] = []
+        self.endpoints: list[FakeTransport] = []
+
+    async def __call__(self, local_addr=None, remote_addr=None, broadcast=False):
+        protocol = device_module._Protocol()
+        transport = FakeTransport(protocol, local_addr, remote_addr, broadcast, self.replies)
+        self.replies = []
+        protocol.connection_made(transport)
+        self.endpoints.append(transport)
+        return transport, protocol
 
 
 @pytest.fixture
-def fake_socket(monkeypatch):
-    FakeSocket.instances = []
-    FakeSocket.queue = []
-    monkeypatch.setattr(device_module.socket, "socket", FakeSocket)
-    monkeypatch.setattr(broadlink.socket, "socket", FakeSocket)
+def net(monkeypatch):
+    fake = FakeNet()
+    monkeypatch.setattr(device_module, "_open_endpoint", fake)
+    monkeypatch.setattr(broadlink, "_open_endpoint", fake)
     # Keep the retry loop from waiting on real time.
-    monkeypatch.setattr(device_module, "DEFAULT_RETRY_INTVL", 0.001)
-    return FakeSocket
+    monkeypatch.setattr(device_module, "DEFAULT_RETRY_INTVL", 0.005)
+    return fake
+
+
+def run(coro):
+    return asyncio.run(coro)
 
 
 def fixed_device(cls=Device, devtype=0x2737) -> Device:
@@ -86,17 +92,18 @@ def fixed_device(cls=Device, devtype=0x2737) -> Device:
 # ------------------------------------------------------------------ send_packet
 
 
-def test_send_packet_wire_bytes(fake_socket):
+def test_send_packet_wire_bytes(net):
     dev = fixed_device()
     dev.id = 0x00000001
     payload = bytes([0x01]) + bytes(15)
-    fake_socket.queue = [(make_response(dev, bytes(16)), HOST)]
+    net.replies = [(make_response(dev, bytes(16)), HOST)]
 
-    resp = dev.send_packet(0x6A, payload)
+    resp = run(dev.send_packet(0x6A, payload))
 
-    sock = fake_socket.instances[-1]
-    assert len(sock.sent) == 1
-    frame, addr = sock.sent[0]
+    ep = net.endpoints[-1]
+    assert ep.remote_addr == HOST
+    assert len(ep.sent) == 1
+    frame, addr = ep.sent[0]
     assert addr == HOST
     assert frame[0x00:0x08] == bytes.fromhex("5aa5aa555aa5aa55")
     assert frame[0x24:0x26] == (0x2737).to_bytes(2, "little")
@@ -116,55 +123,110 @@ def test_send_packet_wire_bytes(fake_socket):
     assert dev.count == 0x8001
 
 
-def test_send_packet_pads_payload_to_block(fake_socket):
+def test_send_packet_pads_payload_to_block(net):
     dev = fixed_device()
-    fake_socket.queue = [(make_response(dev, b""), HOST)]
-    dev.send_packet(0x6A, bytes(20))
-    frame = fake_socket.instances[-1].sent[0][0]
+    net.replies = [(make_response(dev, b""), HOST)]
+    run(dev.send_packet(0x6A, bytes(20)))
+    frame = net.endpoints[-1].sent[0][0]
     assert len(frame) == 0x38 + 32
     assert dev.decrypt(frame[0x38:]) == bytes(32)
 
 
-def test_send_packet_counter_wraps_with_high_bit(fake_socket):
+def test_send_packet_counter_wraps_with_high_bit(net):
     dev = fixed_device()
     dev.count = 0xFFFF
-    fake_socket.queue = [(make_response(dev, b""), HOST)]
-    dev.send_packet(0x6A, b"")
+    net.replies = [(make_response(dev, b""), HOST)]
+    run(dev.send_packet(0x6A, b""))
     assert dev.count == 0x8000
 
 
-def test_send_packet_retries_then_times_out(fake_socket, monkeypatch):
+def test_send_packet_reuses_one_endpoint_and_serializes(net):
     dev = fixed_device()
-    dev.timeout = 0.01
-    fake_socket.queue = []  # never answers
+
+    async def go():
+        net.replies = [(make_response(dev, b""), HOST)]
+        await dev.send_packet(0x6A, b"")
+        ep = net.endpoints[-1]
+        ep.replies = [(make_response(dev, b""), HOST), (make_response(dev, b""), HOST)]
+        await asyncio.gather(dev.send_packet(0x6A, b"a"), dev.send_packet(0x6A, b"b"))
+        return ep
+
+    ep = run(go())
+    assert len(net.endpoints) == 1
+    assert len(ep.sent) == 3
+    # Counters are consecutive: the lock kept the two concurrent calls apart.
+    counts = [int.from_bytes(f[0x28:0x2A], "little") for f, _ in ep.sent]
+    assert counts == [0x8001, 0x8002, 0x8003]
+
+
+def test_aclose_then_reopen(net):
+    dev = fixed_device()
+
+    async def go():
+        net.replies = [(make_response(dev, b""), HOST)]
+        await dev.send_packet(0x6A, b"")
+        await dev.aclose()
+        assert net.endpoints[-1].closed
+        net.replies = [(make_response(dev, b""), HOST)]
+        async with dev:
+            await dev.send_packet(0x6A, b"")
+
+    run(go())
+    assert len(net.endpoints) == 2
+    assert net.endpoints[-1].closed  # the context manager closed it
+
+
+def test_send_packet_retries_then_times_out(net):
+    dev = fixed_device()
+    dev.timeout = 0.02
+    net.replies = []  # never answers
     with pytest.raises(e.NetworkTimeoutError) as err:
-        dev.send_packet(0x6A, b"")
+        run(dev.send_packet(0x6A, b""))
     assert err.value.errno == -4000
-    assert len(fake_socket.instances[-1].sent) >= 1
+    assert len(net.endpoints[-1].sent) >= 2  # resent at least once
 
 
-def test_send_packet_rejects_short_response(fake_socket):
+def test_send_packet_rejects_short_response(net):
     dev = fixed_device()
-    fake_socket.queue = [(bytes(0x10), HOST)]
+    net.replies = [(bytes(0x10), HOST)]
     with pytest.raises(e.DataValidationError) as err:
-        dev.send_packet(0x6A, b"")
+        run(dev.send_packet(0x6A, b""))
     assert err.value.errno == -4007
 
 
-def test_send_packet_rejects_bad_checksum(fake_socket):
+def test_send_packet_rejects_bad_checksum(net):
     dev = fixed_device()
     frame = bytearray(make_response(dev, b""))
     frame[0x20] ^= 0xFF
-    fake_socket.queue = [(bytes(frame), HOST)]
+    net.replies = [(bytes(frame), HOST)]
     with pytest.raises(e.DataValidationError) as err:
-        dev.send_packet(0x6A, b"")
+        run(dev.send_packet(0x6A, b""))
     assert err.value.errno == -4008
+
+
+def test_stale_reply_is_drained_before_a_request(net):
+    dev = fixed_device()
+
+    async def go():
+        net.replies = [(make_response(dev, b""), HOST)]
+        await dev.send_packet(0x6A, b"")
+        ep = net.endpoints[-1]
+        # A late packet shows up between requests; it must not be taken as
+        # the answer to the next one.
+        stale = bytearray(make_response(dev, b""))
+        stale[0x20] ^= 0xFF  # corrupt so it would fail validation if used
+        ep.protocol.queue.put_nowait((bytes(stale), HOST))
+        ep.replies = [(make_response(dev, bytes([7]) + bytes(15)), HOST)]
+        resp = await dev.send_packet(0x6A, b"")
+        return dev.decrypt(resp[0x38:])[0]
+
+    assert run(go()) == 7
 
 
 # ------------------------------------------------------------------------- auth
 
 
-def test_auth_uses_initial_key_and_installs_session_key(fake_socket):
+def test_auth_uses_initial_key_and_installs_session_key(net):
     dev = fixed_device()
     dev.id = 99  # stale session; auth must reset it before sending
     dev.update_aes(bytes(range(16)))  # stale key
@@ -175,11 +237,11 @@ def test_auth_uses_initial_key_and_installs_session_key(fake_socket):
     # INITIAL key, which is what the device expects auth to be decrypted with.
     fresh = fixed_device()
     reply = make_response(fresh, session_id.to_bytes(4, "little") + session_key)
-    fake_socket.queue = [(reply, HOST)]
+    net.replies = [(reply, HOST)]
 
-    assert dev.auth() is True
+    assert run(dev.auth()) is True
 
-    frame = fake_socket.instances[-1].sent[0][0]
+    frame = net.endpoints[-1].sent[0][0]
     assert frame[0x26:0x28] == (0x65).to_bytes(2, "little")
     assert frame[0x30:0x34] == bytes(4)  # id reset to 0 for the handshake
     plaintext = fresh.decrypt(frame[0x38:])
@@ -196,11 +258,57 @@ def test_auth_uses_initial_key_and_installs_session_key(fake_socket):
     assert dev.encrypt(bytes(16)) == probe.encrypt(bytes(16))
 
 
-def test_auth_surfaces_device_error(fake_socket):
+def test_auth_surfaces_device_error(net):
     dev = fixed_device()
-    fake_socket.queue = [(make_response(dev, bytes(20), error=0xFFF9), HOST)]
+    net.replies = [(make_response(dev, bytes(20), error=0xFFF9), HOST)]
     with pytest.raises(e.AuthorizationError):
-        dev.auth()
+        run(dev.auth())
+
+
+def test_expired_session_is_reauthenticated_once(net):
+    dev = fixed_device()
+    dev.id = 5
+    session_key = bytes.fromhex("00112233445566778899aabbccddeeff")
+    fresh = fixed_device()
+    auth_reply = make_response(fresh, (0x42).to_bytes(4, "little") + session_key)
+
+    async def go():
+        # First request: device says the control key expired (-7).
+        net.replies = [(make_response(dev, b"", error=0xFFF9), HOST)]
+        await dev._endpoint()
+        ep = net.endpoints[-1]
+        # After the expired reply the library must auth (reply 2, under the
+        # initial key) and resend (reply 3, under the new session key).
+        renewed = fixed_device()
+        renewed.update_aes(session_key)
+        ep.replies = [
+            (auth_reply, HOST),
+            (make_response(renewed, bytes([9]) + bytes(15)), HOST),
+        ]
+        ep.replies.insert(0, (make_response(dev, b"", error=0xFFF9), HOST))
+        resp = await dev.send_packet(0x6A, bytes(16))
+        return ep, resp
+
+    ep, resp = run(go())
+    types = [int.from_bytes(f[0x26:0x28], "little") for f, _ in ep.sent]
+    assert types == [0x6A, 0x65, 0x6A]
+    assert dev.id == 0x42
+    assert resp[0x22:0x24] == b"\x00\x00"
+    assert dev.decrypt(resp[0x38:])[0] == 9
+
+
+def test_reauth_is_not_attempted_twice(net):
+    dev = fixed_device()
+
+    async def go():
+        await dev._endpoint()
+        ep = net.endpoints[-1]
+        expired = (make_response(dev, b"", error=0xFFF9), HOST)
+        ep.replies = [expired, expired]  # request fails, auth fails
+        return await dev.send_packet(0x6A, b"")
+
+    with pytest.raises(e.AuthorizationError):
+        run(go())
 
 
 # ------------------------------------------------------------------- discovery
@@ -215,37 +323,53 @@ def hello_response(devtype: int, mac: bytes, name: str, locked: bool) -> bytes:
     return bytes(frame)
 
 
-def test_scan_builds_hello_packet_and_parses_replies(fake_socket):
-    fake_socket.queue = [
+async def collect(aiter):
+    return [x async for x in aiter]
+
+
+def test_scan_builds_hello_packet_and_parses_replies(net):
+    other = bytes.fromhex("34ea34000001")
+    net.replies = [
         (hello_response(0x6026, MAC, "Bedroom RM", False), ("192.0.2.10", 80)),
         (hello_response(0x6026, MAC, "Bedroom RM", False), ("192.0.2.10", 80)),  # dup
-        (hello_response(0x2711, bytes.fromhex("34ea34000001"), "Plug", True),
-         ("192.0.2.11", 80)),
+        (hello_response(0x2711, other, "Plug", True), ("192.0.2.11", 80)),
     ]
-    found = list(device_module.scan(timeout=0.01, local_ip_address="192.0.2.2"))
 
+    async def go():
+        found = []
+        async for entry in device_module.scan(timeout=0.02, local_ip_address="192.0.2.2"):
+            found.append(entry)
+            ep = net.endpoints[-1]
+            # replies are released one per send; pull the rest through
+            while ep.replies:
+                ep.protocol.queue.put_nowait(ep.replies.pop(0))
+        return found
+
+    found = run(go())
     assert found == [
         (0x6026, ("192.0.2.10", 80), MAC, "Bedroom RM", False),
-        (0x2711, ("192.0.2.11", 80), bytes.fromhex("34ea34000001"), "Plug", True),
+        (0x2711, ("192.0.2.11", 80), other, "Plug", True),
     ]
-    sock = fake_socket.instances[-1]
-    assert sock.bound == ("192.0.2.2", 0)
-    packet, addr = sock.sent[0]
+    ep = net.endpoints[-1]
+    assert ep.local_addr == ("192.0.2.2", 0)
+    assert ep.broadcast is True
+    packet, addr = ep.sent[0]
     assert addr == ("255.255.255.255", 80)
     assert len(packet) == 0x30
     assert packet[0x26] == 6
     assert packet[0x18:0x1C] == socket.inet_aton("192.0.2.2")[::-1]
+    assert packet[0x1C:0x1E] == (40000).to_bytes(2, "little")  # bound port
     body = bytearray(packet)
     body[0x20:0x22] = b"\x00\x00"
     assert packet[0x20:0x22] == (sum(body, 0xBEAF) & 0xFFFF).to_bytes(2, "little")
-    assert sock.closed
+    assert ep.closed
 
 
-def test_discover_and_hello_build_devices(fake_socket):
-    fake_socket.queue = [
+def test_discover_and_hello_build_devices(net):
+    net.replies = [
         (hello_response(0x6026, MAC, "Bedroom RM", False), ("192.0.2.10", 80)),
     ]
-    devices = broadlink.discover(timeout=0.01)
+    devices = run(broadlink.discover(timeout=0.02))
     assert len(devices) == 1
     dev = devices[0]
     assert isinstance(dev, broadlink.rm4pro)
@@ -255,45 +379,47 @@ def test_discover_and_hello_build_devices(fake_socket):
     assert dev.model == "RM4 pro"
     assert dev.manufacturer == "Broadlink"
 
-    fake_socket.queue = [
+    net.replies = [
         (hello_response(0x6026, MAC, "Bedroom RM", True), ("192.0.2.10", 80)),
     ]
-    dev = broadlink.hello("192.0.2.10", timeout=0.01)
+    dev = run(broadlink.hello("192.0.2.10", timeout=0.02))
     assert dev.is_locked is True
-    assert fake_socket.instances[-1].sent[0][1] == ("192.0.2.10", 80)
+    assert net.endpoints[-1].sent[0][1] == ("192.0.2.10", 80)
+    assert net.endpoints[-1].closed
 
 
-def test_hello_times_out(fake_socket):
-    fake_socket.queue = []
+def test_hello_times_out(net):
+    net.replies = []
     with pytest.raises(e.NetworkTimeoutError):
-        broadlink.hello("192.0.2.10", timeout=0.01)
+        run(broadlink.hello("192.0.2.10", timeout=0.02))
 
 
-def test_device_hello_validates_identity(fake_socket):
+def test_device_hello_validates_identity(net):
     dev = fixed_device(broadlink.rm4pro, 0x6026)
-    fake_socket.queue = [(hello_response(0x6026, MAC, "Renamed", True), HOST)]
-    assert dev.hello() is True
+    net.replies = [(hello_response(0x6026, MAC, "Renamed", True), HOST)]
+    assert run(dev.hello()) is True
     assert dev.name == "Renamed"
     assert dev.is_locked is True
 
-    fake_socket.queue = [
+    net.replies = [
         (hello_response(0x6026, bytes.fromhex("000000000001"), "Other", False), HOST)
     ]
     with pytest.raises(e.DataValidationError):
-        dev.hello()
+        run(dev.hello())
 
-    fake_socket.queue = [(hello_response(0x2711, MAC, "Other", False), HOST)]
+    net.replies = [(hello_response(0x2711, MAC, "Other", False), HOST)]
     with pytest.raises(e.DataValidationError):
-        dev.hello()
+        run(dev.hello())
 
 
-def test_ping_packet(fake_socket):
+def test_ping_packet(net):
     dev = fixed_device()
-    dev.ping()
-    packet, addr = fake_socket.instances[-1].sent[0]
+    run(dev.ping())
+    packet, addr = net.endpoints[-1].sent[0]
     assert addr == HOST
     assert len(packet) == 0x30
     assert packet[0x26] == 1
+    assert net.endpoints[-1].closed
 
 
 # ------------------------------------------------------------------ gendevice
@@ -340,10 +466,11 @@ def test_product_table_has_no_duplicate_ids():
 # ----------------------------------------------------------------------- setup
 
 
-def test_setup_packet(fake_socket):
-    broadlink.setup("MyWifi", "hunter2", 3, ip_address="192.0.2.255")
-    packet, addr = fake_socket.instances[-1].sent[0]
+def test_setup_packet(net):
+    run(broadlink.setup("MyWifi", "hunter2", 3, ip_address="192.0.2.255"))
+    packet, addr = net.endpoints[-1].sent[0]
     assert addr == ("192.0.2.255", 80)
+    assert net.endpoints[-1].broadcast is True
     assert len(packet) == 0x88
     assert packet[0x26] == 0x14
     assert packet[68:74] == b"MyWifi"
@@ -354,6 +481,7 @@ def test_setup_packet(fake_socket):
     body = bytearray(packet)
     body[0x20:0x22] = b"\x00\x00"
     assert packet[0x20:0x22] == (sum(body, 0xBEAF) & 0xFFFF).to_bytes(2, "little")
+    assert net.endpoints[-1].closed
 
 
 # ------------------------------------------------------------------ exceptions

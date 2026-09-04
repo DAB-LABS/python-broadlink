@@ -1,9 +1,19 @@
-"""Support for Broadlink devices."""
+"""Support for Broadlink devices.
+
+Transport layer. Every device method ends up in :meth:`Device.send_packet`,
+which frames, encrypts and sends one request over UDP and waits for the one
+reply. The protocol is strictly request and reply and the device never
+speaks unprompted, so each device keeps a single datagram endpoint and an
+``asyncio.Lock`` that serializes calls on it.
+"""
+
+from __future__ import annotations
+
+import asyncio
 import random
 import socket
-import threading
-import time
-from typing import Generator, Optional, Tuple, Union
+from collections.abc import AsyncIterator
+from typing import Optional, Tuple, Union
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -17,77 +27,141 @@ from .const import (
 )
 from .protocol import Datetime
 
-HelloResponse = Tuple[int, Tuple[str, int], str, str, bool]
+HelloResponse = Tuple[int, Tuple[str, int], bytes, str, bool]
+
+# Device error codes that mean the session key is no longer accepted and a
+# fresh auth() will fix it. -7: control key expired; -4012: control id error.
+_REAUTH_CODES = {-7, -4012}
 
 
-def scan(
-    timeout: int = DEFAULT_TIMEOUT,
-    local_ip_address: Optional[str] = None,
-    discover_ip_address: str = DEFAULT_BCAST_ADDR,
-    discover_ip_port: int = DEFAULT_PORT,
-) -> Generator[HelloResponse, None, None]:
-    """Broadcast a hello message and yield responses."""
-    conn = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    conn.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    conn.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+class _Protocol(asyncio.DatagramProtocol):
+    """Datagram protocol that hands every received packet to a queue."""
 
-    if local_ip_address:
-        conn.bind((local_ip_address, 0))
-        port = conn.getsockname()[1]
-    else:
-        local_ip_address = "0.0.0.0"
-        port = 0
+    def __init__(self) -> None:
+        self.queue: asyncio.Queue[tuple[bytes, tuple[str, int]]] = asyncio.Queue()
+        self.transport: Optional[asyncio.DatagramTransport] = None
+        self.closed = asyncio.get_running_loop().create_future()
 
+    def connection_made(self, transport) -> None:  # type: ignore[override]
+        self.transport = transport
+
+    def datagram_received(self, data: bytes, addr: tuple[str, int]) -> None:
+        self.queue.put_nowait((data, addr))
+
+    def error_received(self, exc: Exception) -> None:
+        # ICMP unreachable and the like. Surface it as a receive of nothing;
+        # the retry loop will time out and raise NetworkTimeoutError.
+        pass
+
+    def connection_lost(self, exc: Optional[Exception]) -> None:
+        if not self.closed.done():
+            self.closed.set_result(None)
+
+    def drain(self) -> None:
+        """Drop anything that arrived before the current request."""
+        while not self.queue.empty():
+            self.queue.get_nowait()
+
+
+async def _open_endpoint(
+    local_addr: Optional[tuple[str, int]] = None,
+    remote_addr: Optional[tuple[str, int]] = None,
+    broadcast: bool = False,
+) -> tuple[asyncio.DatagramTransport, _Protocol]:
+    """Create a UDP endpoint. Tests replace this to fake the network."""
+    loop = asyncio.get_running_loop()
+    transport, protocol = await loop.create_datagram_endpoint(
+        _Protocol,
+        local_addr=local_addr,
+        remote_addr=remote_addr,
+        family=socket.AF_INET,
+        allow_broadcast=broadcast,
+    )
+    return transport, protocol  # type: ignore[return-value]
+
+
+def _hello_packet(local_ip_address: str, port: int) -> bytearray:
     packet = bytearray(0x30)
     packet[0x08:0x14] = Datetime.pack(Datetime.now())
     packet[0x18:0x1C] = socket.inet_aton(local_ip_address)[::-1]
     packet[0x1C:0x1E] = port.to_bytes(2, "little")
     packet[0x26] = 6
-
     checksum = sum(packet, 0xBEAF) & 0xFFFF
     packet[0x20:0x22] = checksum.to_bytes(2, "little")
+    return packet
 
-    start_time = time.time()
-    discovered = []
 
+def _parse_hello(resp: bytes, host: tuple[str, int]) -> HelloResponse:
+    devtype = resp[0x34] | resp[0x35] << 8
+    mac = resp[0x3A:0x40][::-1]
+    name = resp[0x40:].split(b"\x00")[0].decode()
+    is_locked = bool(resp[0x7F])
+    return devtype, host, mac, name, is_locked
+
+
+async def scan(
+    timeout: float = DEFAULT_TIMEOUT,
+    local_ip_address: Optional[str] = None,
+    discover_ip_address: str = DEFAULT_BCAST_ADDR,
+    discover_ip_port: int = DEFAULT_PORT,
+) -> AsyncIterator[HelloResponse]:
+    """Broadcast a hello message and yield responses as they arrive.
+
+    The hello is repeated every ``DEFAULT_RETRY_INTVL`` seconds until
+    ``timeout`` elapses. Each device is yielded once.
+    """
+    local_addr = (local_ip_address, 0) if local_ip_address else None
+    transport, protocol = await _open_endpoint(local_addr=local_addr, broadcast=True)
     try:
-        while (time.time() - start_time) < timeout:
-            time_left = timeout - (time.time() - start_time)
-            conn.settimeout(min(DEFAULT_RETRY_INTVL, time_left))
-            conn.sendto(packet, (discover_ip_address, discover_ip_port))
+        if local_ip_address:
+            port = transport.get_extra_info("sockname")[1]
+        else:
+            local_ip_address = "0.0.0.0"
+            port = 0
+        packet = _hello_packet(local_ip_address, port)
 
+        loop = asyncio.get_running_loop()
+        start = loop.time()
+        discovered: set[tuple[tuple[str, int], bytes, int]] = set()
+
+        while (loop.time() - start) < timeout:
+            transport.sendto(packet, (discover_ip_address, discover_ip_port))
+            deadline = min(DEFAULT_RETRY_INTVL, timeout - (loop.time() - start))
+            slot_end = loop.time() + deadline
             while True:
-                try:
-                    resp, host = conn.recvfrom(1024)
-                except socket.timeout:
+                remaining = slot_end - loop.time()
+                if remaining <= 0:
                     break
-
-                devtype = resp[0x34] | resp[0x35] << 8
-                mac = resp[0x3A:0x40][::-1]
-
-                if (host, mac, devtype) in discovered:
+                try:
+                    resp, host = await asyncio.wait_for(protocol.queue.get(), remaining)
+                except asyncio.TimeoutError:
+                    break
+                if len(resp) < 0x80:
                     continue
-                discovered.append((host, mac, devtype))
-
-                name = resp[0x40:].split(b"\x00")[0].decode()
-                is_locked = bool(resp[0x7F])
-                yield devtype, host, mac, name, is_locked
+                entry = _parse_hello(resp, host)
+                key = (entry[1], entry[2], entry[0])
+                if key in discovered:
+                    continue
+                discovered.add(key)
+                yield entry
     finally:
-        conn.close()
+        transport.close()
 
 
-def ping(ip_address: str, port: int = DEFAULT_PORT) -> None:
+async def ping(ip_address: str, port: int = DEFAULT_PORT) -> None:
     """Send a ping packet to an address.
 
     This packet feeds the watchdog timer of firmwares >= v53.
     Useful to prevent reboots when the cloud cannot be reached.
     It must be sent every 2 minutes in such cases.
     """
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as conn:
-        conn.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    transport, _ = await _open_endpoint(broadcast=True)
+    try:
         packet = bytearray(0x30)
         packet[0x26] = 1
-        conn.sendto(packet, (ip_address, port))
+        transport.sendto(packet, (ip_address, port))
+    finally:
+        transport.close()
 
 
 class Device:
@@ -103,7 +177,7 @@ class Device:
         host: Tuple[str, int],
         mac: Union[bytes, str],
         devtype: int,
-        timeout: int = DEFAULT_TIMEOUT,
+        timeout: float = DEFAULT_TIMEOUT,
         name: str = "",
         model: str = "",
         manufacturer: str = "",
@@ -122,10 +196,14 @@ class Device:
         self.iv = bytes.fromhex(self.__INIT_VECT)
         self.id = 0
         self.type = self.TYPE  # For backwards compatibility.
-        self.lock = threading.Lock()
 
         self.aes = None
         self.update_aes(bytes.fromhex(self.__INIT_KEY))
+
+        self._lock: Optional[asyncio.Lock] = None
+        self._transport: Optional[asyncio.DatagramTransport] = None
+        self._protocol: Optional[_Protocol] = None
+        self._reauth_ok = True
 
     def __repr__(self) -> str:
         """Return a formal representation of the device."""
@@ -154,6 +232,14 @@ class Device:
             ":".join(format(x, "02X") for x in self.mac),
         )
 
+    async def __aenter__(self) -> "Device":
+        return self
+
+    async def __aexit__(self, *exc) -> None:
+        await self.aclose()
+
+    # ------------------------------------------------------------ crypto
+
     def update_aes(self, key: bytes) -> None:
         """Update AES."""
         self.aes = Cipher(
@@ -170,7 +256,9 @@ class Device:
         decryptor = self.aes.decryptor()
         return decryptor.update(bytes(payload)) + decryptor.finalize()
 
-    def auth(self) -> bool:
+    # ---------------------------------------------------------- session
+
+    async def auth(self) -> bool:
         """Authenticate to the device."""
         self.id = 0
         self.update_aes(bytes.fromhex(self.__INIT_KEY))
@@ -181,7 +269,7 @@ class Device:
         packet[0x2D] = 0x01
         packet[0x30:0x36] = "Test 1".encode()
 
-        response = self.send_packet(0x65, packet)
+        response = await self.send_packet(0x65, packet, _reauth=False)
         e.check_error(response[0x22:0x24])
         payload = self.decrypt(response[0x38:])
 
@@ -189,7 +277,7 @@ class Device:
         self.update_aes(payload[0x04:0x14])
         return True
 
-    def hello(self, local_ip_address=None) -> bool:
+    async def hello(self, local_ip_address=None) -> bool:
         """Send a hello message to the device.
 
         Device information is checked before updating name and lock status.
@@ -200,15 +288,16 @@ class Device:
             discover_ip_address=self.host[0],
             discover_ip_port=self.host[1],
         )
-        try:
-            devtype, _, mac, name, is_locked = next(responses)
-
-        except StopIteration as err:
+        entry = None
+        async for entry in responses:
+            break
+        if entry is None:
             raise e.NetworkTimeoutError(
                 -4000,
                 "Network timeout",
                 f"No response received within {self.timeout}s",
-            ) from err
+            )
+        devtype, _, mac, name, is_locked = entry
 
         if mac != self.mac:
             raise e.DataValidationError(
@@ -230,40 +319,40 @@ class Device:
         self.is_locked = is_locked
         return True
 
-    def ping(self) -> None:
+    async def ping(self) -> None:
         """Ping the device.
 
         This packet feeds the watchdog timer of firmwares >= v53.
         Useful to prevent reboots when the cloud cannot be reached.
         It must be sent every 2 minutes in such cases.
         """
-        ping(self.host[0], port=self.host[1])
+        await ping(self.host[0], port=self.host[1])
 
-    def get_fwversion(self) -> int:
+    async def get_fwversion(self) -> int:
         """Get firmware version."""
         packet = bytearray([0x68])
-        response = self.send_packet(0x6A, packet)
+        response = await self.send_packet(0x6A, packet)
         e.check_error(response[0x22:0x24])
         payload = self.decrypt(response[0x38:])
         return payload[0x4] | payload[0x5] << 8
 
-    def set_name(self, name: str) -> None:
+    async def set_name(self, name: str) -> None:
         """Set device name."""
         packet = bytearray(4)
         packet += name.encode("utf-8")
         packet += bytearray(0x50 - len(packet))
         packet[0x43] = self.is_locked
-        response = self.send_packet(0x6A, packet)
+        response = await self.send_packet(0x6A, packet)
         e.check_error(response[0x22:0x24])
         self.name = name
 
-    def set_lock(self, state: bool) -> None:
+    async def set_lock(self, state: bool) -> None:
         """Lock/unlock the device."""
         packet = bytearray(4)
         packet += self.name.encode("utf-8")
         packet += bytearray(0x50 - len(packet))
         packet[0x43] = bool(state)
-        response = self.send_packet(0x6A, packet)
+        response = await self.send_packet(0x6A, packet)
         e.check_error(response[0x22:0x24])
         self.is_locked = bool(state)
 
@@ -271,8 +360,24 @@ class Device:
         """Return device type."""
         return self.type
 
-    def send_packet(self, packet_type: int, payload: bytes) -> bytes:
-        """Send a packet to the device."""
+    # -------------------------------------------------------- transport
+
+    async def aclose(self) -> None:
+        """Close the device's endpoint. It is reopened on the next call."""
+        if self._transport is not None:
+            self._transport.close()
+            self._transport = None
+            self._protocol = None
+
+    async def _endpoint(self) -> tuple[asyncio.DatagramTransport, _Protocol]:
+        if self._transport is None or self._transport.is_closing():
+            self._transport, self._protocol = await _open_endpoint(
+                remote_addr=self.host
+            )
+        return self._transport, self._protocol  # type: ignore[return-value]
+
+    def _frame(self, packet_type: int, payload: bytes) -> bytes:
+        """Build the wire frame for one request (advances the counter)."""
         self.count = ((self.count + 1) | 0x8000) & 0xFFFF
         packet = bytearray(0x38)
         packet[0x00:0x08] = bytes.fromhex("5aa5aa555aa5aa55")
@@ -291,27 +396,10 @@ class Device:
 
         checksum = sum(packet, 0xBEAF) & 0xFFFF
         packet[0x20:0x22] = checksum.to_bytes(2, "little")
+        return bytes(packet)
 
-        with self.lock and socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as conn:
-            timeout = self.timeout
-            start_time = time.time()
-
-            while True:
-                time_left = timeout - (time.time() - start_time)
-                conn.settimeout(min(DEFAULT_RETRY_INTVL, time_left))
-                conn.sendto(packet, self.host)
-
-                try:
-                    resp = conn.recvfrom(2048)[0]
-                    break
-                except socket.timeout as err:
-                    if (time.time() - start_time) > timeout:
-                        raise e.NetworkTimeoutError(
-                            -4000,
-                            "Network timeout",
-                            f"No response received within {timeout}s",
-                        ) from err
-
+    @staticmethod
+    def _validate(resp: bytes) -> bytes:
         if len(resp) < 0x30:
             raise e.DataValidationError(
                 -4007,
@@ -328,5 +416,55 @@ class Device:
                 "Received data packet check error",
                 f"Expected a checksum of {nom_checksum} and received {real_checksum}",
             )
+        return resp
 
+    async def _exchange(self, packet: bytes) -> bytes:
+        """Send one frame and wait for one reply, resending on silence."""
+        transport, protocol = await self._endpoint()
+        protocol.drain()
+        loop = asyncio.get_running_loop()
+        start = loop.time()
+        timeout = self.timeout
+
+        while True:
+            transport.sendto(packet)
+            time_left = timeout - (loop.time() - start)
+            wait = min(DEFAULT_RETRY_INTVL, time_left)
+            try:
+                resp, _ = await asyncio.wait_for(protocol.queue.get(), max(wait, 0))
+            except asyncio.TimeoutError:
+                if (loop.time() - start) >= timeout:
+                    raise e.NetworkTimeoutError(
+                        -4000,
+                        "Network timeout",
+                        f"No response received within {timeout}s",
+                    ) from None
+                continue
+            return self._validate(resp)
+
+    async def send_packet(
+        self, packet_type: int, payload: bytes, *, _reauth: bool = True
+    ) -> bytes:
+        """Send a packet to the device and return the raw response frame.
+
+        If the device answers that the session key is no longer valid, the
+        session is re-authenticated once and the request is sent again.
+        """
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        async with self._lock:
+            resp = await self._exchange(self._frame(packet_type, bytes(payload)))
+
+        if _reauth and self._reauth_ok:
+            code = int.from_bytes(resp[0x22:0x24], "little", signed=True)
+            if code in _REAUTH_CODES:
+                self._reauth_ok = False
+                try:
+                    await self.auth()
+                    async with self._lock:
+                        resp = await self._exchange(
+                            self._frame(packet_type, bytes(payload))
+                        )
+                finally:
+                    self._reauth_ok = True
         return resp

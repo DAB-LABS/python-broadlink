@@ -13,7 +13,7 @@ class s3(Device):
     TYPE = "S3"
     MAX_SUBDEVICES = 8
 
-    def get_subdevices(self, step: int = 5) -> list:
+    async def get_subdevices(self, step: int = 5) -> list:
         """Return a list of sub devices."""
         total = self.MAX_SUBDEVICES
         sub_devices = []
@@ -23,7 +23,7 @@ class s3(Device):
         while index < total:
             state = {"count": step, "index": index}
             packet = self._encode(14, state)
-            resp = self.send_packet(0x6A, packet)
+            resp = await self.send_packet(0x6A, packet)
             e.check_error(resp[0x22:0x24])
             resp = self._decode(resp)
 
@@ -43,18 +43,18 @@ class s3(Device):
 
         return sub_devices
 
-    def get_state(self, did: Optional[str] = None) -> dict:
+    async def get_state(self, did: Optional[str] = None) -> dict:
         """Return the power state of the device."""
         state = {}
         if did is not None:
             state["did"] = did
 
         packet = self._encode(1, state)
-        response = self.send_packet(0x6A, packet)
+        response = await self.send_packet(0x6A, packet)
         e.check_error(response[0x22:0x24])
         return self._decode(response)
 
-    def set_state(
+    async def set_state(
         self,
         did: Optional[str] = None,
         pwr1: Optional[bool] = None,
@@ -73,7 +73,7 @@ class s3(Device):
             state["pwr3"] = int(bool(pwr3))
 
         packet = self._encode(2, state)
-        response = self.send_packet(0x6A, packet)
+        response = await self.send_packet(0x6A, packet)
         e.check_error(response[0x22:0x24])
         return self._decode(response)
 

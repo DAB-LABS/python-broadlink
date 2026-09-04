@@ -52,31 +52,31 @@ class rmmini(Device):
 
     TYPE = "RMMINI"
 
-    def _send(self, command: int, data: bytes = b"") -> bytes:
+    async def _send(self, command: int, data: bytes = b"") -> bytes:
         """Send a packet to the device."""
         packet = struct.pack("<I", command) + data
-        resp = self.send_packet(0x6A, packet)
+        resp = await self.send_packet(0x6A, packet)
         e.check_error(resp[0x22:0x24])
         payload = self.decrypt(resp[0x38:])
         return payload[0x4:]
 
-    def update(self) -> None:
+    async def update(self) -> None:
         """Update device name and lock status."""
-        resp = self._send(0x1)
+        resp = await self._send(0x1)
         self.name = resp[0x48:].split(b"\x00")[0].decode()
         self.is_locked = bool(resp[0x87])
 
-    def send_data(self, data: bytes) -> None:
+    async def send_data(self, data: bytes) -> None:
         """Send a code to the device."""
-        self._send(0x2, data)
+        await self._send(0x2, data)
 
-    def enter_learning(self) -> None:
+    async def enter_learning(self) -> None:
         """Enter infrared learning mode."""
-        self._send(0x3)
+        await self._send(0x3)
 
-    def check_data(self) -> bytes:
+    async def check_data(self) -> bytes:
         """Return the last captured code."""
-        return self._send(0x4)
+        return await self._send(0x4)
 
 
 class rmpro(rmmini):
@@ -84,37 +84,37 @@ class rmpro(rmmini):
 
     TYPE = "RMPRO"
 
-    def sweep_frequency(self) -> None:
+    async def sweep_frequency(self) -> None:
         """Sweep frequency."""
-        self._send(0x19)
+        await self._send(0x19)
 
-    def check_frequency(self) -> Tuple[bool, float]:
+    async def check_frequency(self) -> Tuple[bool, float]:
         """Return True if the frequency was identified successfully."""
-        resp = self._send(0x1A)
+        resp = await self._send(0x1A)
         is_found = bool(resp[0])
         frequency = struct.unpack("<I", resp[1:5])[0] / 1000.0
         return is_found, frequency
 
-    def find_rf_packet(self, frequency: Optional[float] = None) -> None:
+    async def find_rf_packet(self, frequency: Optional[float] = None) -> None:
         """Enter radiofrequency learning mode."""
         payload = bytearray()
         if frequency:
             payload += struct.pack("<I", int(frequency * 1000))
-        self._send(0x1B, payload)
+        await self._send(0x1B, payload)
 
-    def cancel_sweep_frequency(self) -> None:
+    async def cancel_sweep_frequency(self) -> None:
         """Cancel sweep frequency."""
-        self._send(0x1E)
+        await self._send(0x1E)
 
-    def check_sensors(self) -> dict:
+    async def check_sensors(self) -> dict:
         """Return the state of the sensors."""
-        resp = self._send(0x1)
+        resp = await self._send(0x1)
         temp = struct.unpack("<bb", resp[:0x2])
         return {"temperature": temp[0x0] + temp[0x1] / 10.0}
 
-    def check_temperature(self) -> float:
+    async def check_temperature(self) -> float:
         """Return the temperature."""
-        return self.check_sensors()["temperature"]
+        return (await self.check_sensors())["temperature"]
 
 
 class rmminib(rmmini):
@@ -122,10 +122,10 @@ class rmminib(rmmini):
 
     TYPE = "RMMINIB"
 
-    def _send(self, command: int, data: bytes = b"") -> bytes:
+    async def _send(self, command: int, data: bytes = b"") -> bytes:
         """Send a packet to the device."""
         packet = struct.pack("<HI", len(data) + 4, command) + data
-        resp = self.send_packet(0x6A, packet)
+        resp = await self.send_packet(0x6A, packet)
         e.check_error(resp[0x22:0x24])
         payload = self.decrypt(resp[0x38:])
         p_len = struct.unpack("<H", payload[:0x2])[0]
@@ -137,22 +137,22 @@ class rm4mini(rmminib):
 
     TYPE = "RM4MINI"
 
-    def check_sensors(self) -> dict:
+    async def check_sensors(self) -> dict:
         """Return the state of the sensors."""
-        resp = self._send(0x24)
+        resp = await self._send(0x24)
         temp = struct.unpack("<bb", resp[:0x2])
         return {
             "temperature": temp[0x0] + temp[0x1] / 100.0,
             "humidity": resp[0x2] + resp[0x3] / 100.0,
         }
 
-    def check_temperature(self) -> float:
+    async def check_temperature(self) -> float:
         """Return the temperature."""
-        return self.check_sensors()["temperature"]
+        return (await self.check_sensors())["temperature"]
 
-    def check_humidity(self) -> float:
+    async def check_humidity(self) -> float:
         """Return the humidity."""
-        return self.check_sensors()["humidity"]
+        return (await self.check_sensors())["humidity"]
 
 
 class rm4pro(rm4mini, rmpro):

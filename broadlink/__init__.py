@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """The python-broadlink library."""
-import socket
-from typing import Generator, List, Optional, Tuple, Union
+from collections.abc import AsyncIterator
+from typing import List, Optional, Tuple, Union
 
 from . import exceptions as e
 from .alarm import S1C
 from .climate import hvac, hysen
 from .const import DEFAULT_BCAST_ADDR, DEFAULT_PORT, DEFAULT_TIMEOUT
 from .cover import dooya, dooya2, wser
-from .device import Device, ping, scan
+from .device import Device, _open_endpoint, ping, scan
 from .hub import s3
 from .light import lb1, lb2
 from .remote import rm, rm4, rm4mini, rm4pro, rmmini, rmminib, rmpro
@@ -238,64 +238,62 @@ def gendevice(
     return Device(host, mac, dev_type, name=name, is_locked=is_locked)
 
 
-def hello(
+async def hello(
     ip_address: str,
     port: int = DEFAULT_PORT,
-    timeout: int = DEFAULT_TIMEOUT,
+    timeout: float = DEFAULT_TIMEOUT,
 ) -> Device:
     """Direct device discovery.
 
     Useful if the device is locked.
     """
-    try:
-        return next(
-            xdiscover(
-                timeout=timeout,
-                discover_ip_address=ip_address,
-                discover_ip_port=port,
-            )
-        )
-    except StopIteration as err:
-        raise e.NetworkTimeoutError(
-            -4000,
-            "Network timeout",
-            f"No response received within {timeout}s",
-        ) from err
+    async for device in xdiscover(
+        timeout=timeout,
+        discover_ip_address=ip_address,
+        discover_ip_port=port,
+    ):
+        return device
+    raise e.NetworkTimeoutError(
+        -4000,
+        "Network timeout",
+        f"No response received within {timeout}s",
+    )
 
 
-def discover(
-    timeout: int = DEFAULT_TIMEOUT,
+async def discover(
+    timeout: float = DEFAULT_TIMEOUT,
     local_ip_address: Optional[str] = None,
     discover_ip_address: str = DEFAULT_BCAST_ADDR,
     discover_ip_port: int = DEFAULT_PORT,
 ) -> List[Device]:
     """Discover devices connected to the local network."""
-    responses = scan(
-        timeout, local_ip_address, discover_ip_address, discover_ip_port
-    )
-    return [gendevice(*resp) for resp in responses]
+    return [
+        device
+        async for device in xdiscover(
+            timeout, local_ip_address, discover_ip_address, discover_ip_port
+        )
+    ]
 
 
-def xdiscover(
-    timeout: int = DEFAULT_TIMEOUT,
+async def xdiscover(
+    timeout: float = DEFAULT_TIMEOUT,
     local_ip_address: Optional[str] = None,
     discover_ip_address: str = DEFAULT_BCAST_ADDR,
     discover_ip_port: int = DEFAULT_PORT,
-) -> Generator[Device, None, None]:
+) -> AsyncIterator[Device]:
     """Discover devices connected to the local network.
 
-    This function returns a generator that yields devices instantly.
+    Yields each device as soon as it answers.
     """
-    responses = scan(
+    async for resp in scan(
         timeout, local_ip_address, discover_ip_address, discover_ip_port
-    )
-    for resp in responses:
+    ):
         yield gendevice(*resp)
 
 
 # Setup a new Broadlink device via AP Mode. Review the README to see how to enter AP Mode.
 # Only tested with Broadlink RM3 Mini (Blackbean)
-def setup(
+async def setup(
     ssid: str,
     password: str,
     security_mode: int,
@@ -326,8 +324,8 @@ def setup(
     payload[0x20] = checksum & 0xFF  # Checksum 1 position
     payload[0x21] = checksum >> 8  # Checksum 2 position
 
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Internet  # UDP
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    sock.sendto(payload, (ip_address, DEFAULT_PORT))
-    sock.close()
+    transport, _ = await _open_endpoint(broadcast=True)
+    try:
+        transport.sendto(payload, (ip_address, DEFAULT_PORT))
+    finally:
+        transport.close()
