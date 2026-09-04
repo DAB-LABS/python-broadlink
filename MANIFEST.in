@@ -1,0 +1,5 @@
+include LICENSE README.md CHANGELOG.md protocol.md TROUBLESHOOTING.md
+include pyproject.toml
+graft cli
+graft tests
+global-exclude __pycache__ *.py[cod] .DS_Store

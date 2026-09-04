@@ -1,0 +1,4099 @@
+[
+ {
+  "case": {
+   "cls": "Device",
+   "devtype": 0,
+   "method": "get_fwversion",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "0000000034120000"
+   ]
+  },
+  "expect": {
+   "result": 4660,
+   "sent": [
+    [
+     106,
+     "68"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "Device",
+   "devtype": 0,
+   "method": "set_name",
+   "args": [
+    "Living room"
+   ],
+   "kwargs": {},
+   "responses": [
+    "00000000000000000000000000000000"
+   ],
+   "attrs": [
+    "name"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "000000004c6976696e6720726f6f6d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    ]
+   ],
+   "unused_responses": 0,
+   "attrs": {
+    "name": "Living room"
+   }
+  }
+ },
+ {
+  "case": {
+   "cls": "Device",
+   "devtype": 0,
+   "method": "set_lock",
+   "args": [
+    true
+   ],
+   "kwargs": {},
+   "responses": [
+    "00000000000000000000000000000000"
+   ],
+   "attrs": [
+    "is_locked"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "0000000042656e63680000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000"
+    ]
+   ],
+   "unused_responses": 0,
+   "attrs": {
+    "is_locked": true
+   }
+  }
+ },
+ {
+  "case": {
+   "cls": "Device",
+   "devtype": 0,
+   "method": "set_lock",
+   "args": [
+    false
+   ],
+   "kwargs": {},
+   "responses": [
+    "00000000000000000000000000000000"
+   ],
+   "attrs": [
+    "is_locked"
+   ],
+   "setup": {
+    "name": "Kitchen"
+   }
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "000000004b69746368656e000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    ]
+   ],
+   "unused_responses": 0,
+   "attrs": {
+    "is_locked": false
+   }
+  }
+ },
+ {
+  "case": {
+   "cls": "Device",
+   "devtype": 0,
+   "method": "get_type",
+   "args": [],
+   "kwargs": {},
+   "responses": []
+  },
+  "expect": {
+   "result": "Unknown",
+   "sent": [],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rmmini",
+   "devtype": 10039,
+   "method": "send_data",
+   "args": [
+    {
+     "__bytes__": "2600180012341234123412340d05"
+    }
+   ],
+   "kwargs": {},
+   "responses": [
+    "01000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "020000002600180012341234123412340d05"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rmmini",
+   "devtype": 10039,
+   "method": "enter_learning",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "01000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "03000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rmmini",
+   "devtype": 10039,
+   "method": "check_data",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "010000002600180012341234123412340d05"
+   ]
+  },
+  "expect": {
+   "result": {
+    "__bytes__": "2600180012341234123412340d050000000000000000000000000000"
+   },
+   "sent": [
+    [
+     106,
+     "04000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rmmini",
+   "devtype": 10039,
+   "method": "update",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "01000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000426564726f6f6d20524d000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
+   ],
+   "attrs": [
+    "name",
+    "is_locked"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "01000000"
+    ]
+   ],
+   "unused_responses": 0,
+   "attrs": {
+    "name": "Bedroom RM",
+    "is_locked": true
+   }
+  }
+ },
+ {
+  "case": {
+   "cls": "rmpro",
+   "devtype": 10026,
+   "method": "send_data",
+   "args": [
+    {
+     "__bytes__": "2600180012341234123412340d05"
+    }
+   ],
+   "kwargs": {},
+   "responses": [
+    "01000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "020000002600180012341234123412340d05"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rmpro",
+   "devtype": 10026,
+   "method": "enter_learning",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "01000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "03000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rmpro",
+   "devtype": 10026,
+   "method": "check_data",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "010000002600180012341234123412340d05"
+   ]
+  },
+  "expect": {
+   "result": {
+    "__bytes__": "2600180012341234123412340d050000000000000000000000000000"
+   },
+   "sent": [
+    [
+     106,
+     "04000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rmpro",
+   "devtype": 10026,
+   "method": "update",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "01000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000426564726f6f6d20524d000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
+   ],
+   "attrs": [
+    "name",
+    "is_locked"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "01000000"
+    ]
+   ],
+   "unused_responses": 0,
+   "attrs": {
+    "name": "Bedroom RM",
+    "is_locked": true
+   }
+  }
+ },
+ {
+  "case": {
+   "cls": "rmminib",
+   "devtype": 24374,
+   "method": "send_data",
+   "args": [
+    {
+     "__bytes__": "2600180012341234123412340d05"
+    }
+   ],
+   "kwargs": {},
+   "responses": [
+    "040000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "1200020000002600180012341234123412340d05"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rmminib",
+   "devtype": 24374,
+   "method": "enter_learning",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "040000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "040003000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rmminib",
+   "devtype": 24374,
+   "method": "check_data",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "1200000000002600180012341234123412340d05"
+   ]
+  },
+  "expect": {
+   "result": {
+    "__bytes__": "2600180012341234123412340d05"
+   },
+   "sent": [
+    [
+     106,
+     "040004000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rmminib",
+   "devtype": 24374,
+   "method": "update",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "8c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000426564726f6f6d20524d000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
+   ],
+   "attrs": [
+    "name",
+    "is_locked"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "040001000000"
+    ]
+   ],
+   "unused_responses": 0,
+   "attrs": {
+    "name": "Bedroom RM",
+    "is_locked": true
+   }
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4mini",
+   "devtype": 20954,
+   "method": "send_data",
+   "args": [
+    {
+     "__bytes__": "2600180012341234123412340d05"
+    }
+   ],
+   "kwargs": {},
+   "responses": [
+    "040000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "1200020000002600180012341234123412340d05"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4mini",
+   "devtype": 20954,
+   "method": "enter_learning",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "040000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "040003000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4mini",
+   "devtype": 20954,
+   "method": "check_data",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "1200000000002600180012341234123412340d05"
+   ]
+  },
+  "expect": {
+   "result": {
+    "__bytes__": "2600180012341234123412340d05"
+   },
+   "sent": [
+    [
+     106,
+     "040004000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4mini",
+   "devtype": 20954,
+   "method": "update",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "8c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000426564726f6f6d20524d000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
+   ],
+   "attrs": [
+    "name",
+    "is_locked"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "040001000000"
+    ]
+   ],
+   "unused_responses": 0,
+   "attrs": {
+    "name": "Bedroom RM",
+    "is_locked": true
+   }
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4pro",
+   "devtype": 24614,
+   "method": "send_data",
+   "args": [
+    {
+     "__bytes__": "2600180012341234123412340d05"
+    }
+   ],
+   "kwargs": {},
+   "responses": [
+    "040000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "1200020000002600180012341234123412340d05"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4pro",
+   "devtype": 24614,
+   "method": "enter_learning",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "040000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "040003000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4pro",
+   "devtype": 24614,
+   "method": "check_data",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "1200000000002600180012341234123412340d05"
+   ]
+  },
+  "expect": {
+   "result": {
+    "__bytes__": "2600180012341234123412340d05"
+   },
+   "sent": [
+    [
+     106,
+     "040004000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4pro",
+   "devtype": 24614,
+   "method": "update",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "8c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000426564726f6f6d20524d000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
+   ],
+   "attrs": [
+    "name",
+    "is_locked"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "040001000000"
+    ]
+   ],
+   "unused_responses": 0,
+   "attrs": {
+    "name": "Bedroom RM",
+    "is_locked": true
+   }
+  }
+ },
+ {
+  "case": {
+   "cls": "rm",
+   "devtype": 10002,
+   "method": "send_data",
+   "args": [
+    {
+     "__bytes__": "2600180012341234123412340d05"
+    }
+   ],
+   "kwargs": {},
+   "responses": [
+    "01000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "020000002600180012341234123412340d05"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm",
+   "devtype": 10002,
+   "method": "enter_learning",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "01000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "03000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm",
+   "devtype": 10002,
+   "method": "check_data",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "010000002600180012341234123412340d05"
+   ]
+  },
+  "expect": {
+   "result": {
+    "__bytes__": "2600180012341234123412340d050000000000000000000000000000"
+   },
+   "sent": [
+    [
+     106,
+     "04000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm",
+   "devtype": 10002,
+   "method": "update",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "01000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000426564726f6f6d20524d000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
+   ],
+   "attrs": [
+    "name",
+    "is_locked"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "01000000"
+    ]
+   ],
+   "unused_responses": 0,
+   "attrs": {
+    "name": "Bedroom RM",
+    "is_locked": true
+   }
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4",
+   "devtype": 25278,
+   "method": "send_data",
+   "args": [
+    {
+     "__bytes__": "2600180012341234123412340d05"
+    }
+   ],
+   "kwargs": {},
+   "responses": [
+    "040000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "1200020000002600180012341234123412340d05"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4",
+   "devtype": 25278,
+   "method": "enter_learning",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "040000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "040003000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4",
+   "devtype": 25278,
+   "method": "check_data",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "1200000000002600180012341234123412340d05"
+   ]
+  },
+  "expect": {
+   "result": {
+    "__bytes__": "2600180012341234123412340d05"
+   },
+   "sent": [
+    [
+     106,
+     "040004000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4",
+   "devtype": 25278,
+   "method": "update",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "8c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000426564726f6f6d20524d000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
+   ],
+   "attrs": [
+    "name",
+    "is_locked"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "040001000000"
+    ]
+   ],
+   "unused_responses": 0,
+   "attrs": {
+    "name": "Bedroom RM",
+    "is_locked": true
+   }
+  }
+ },
+ {
+  "case": {
+   "cls": "rmpro",
+   "devtype": 10026,
+   "method": "check_sensors",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "010000001704"
+   ]
+  },
+  "expect": {
+   "result": {
+    "temperature": 23.4
+   },
+   "sent": [
+    [
+     106,
+     "01000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rmpro",
+   "devtype": 10026,
+   "method": "check_temperature",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "010000001704"
+   ]
+  },
+  "expect": {
+   "result": 23.4,
+   "sent": [
+    [
+     106,
+     "01000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm",
+   "devtype": 10002,
+   "method": "check_sensors",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "010000001704"
+   ]
+  },
+  "expect": {
+   "result": {
+    "temperature": 23.4
+   },
+   "sent": [
+    [
+     106,
+     "01000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm",
+   "devtype": 10002,
+   "method": "check_temperature",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "010000001704"
+   ]
+  },
+  "expect": {
+   "result": 23.4,
+   "sent": [
+    [
+     106,
+     "01000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4mini",
+   "devtype": 20954,
+   "method": "check_sensors",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "08000000000018233314"
+   ]
+  },
+  "expect": {
+   "result": {
+    "temperature": 24.35,
+    "humidity": 51.2
+   },
+   "sent": [
+    [
+     106,
+     "040024000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4mini",
+   "devtype": 20954,
+   "method": "check_temperature",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "08000000000018233314"
+   ]
+  },
+  "expect": {
+   "result": 24.35,
+   "sent": [
+    [
+     106,
+     "040024000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4mini",
+   "devtype": 20954,
+   "method": "check_humidity",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "08000000000018233314"
+   ]
+  },
+  "expect": {
+   "result": 51.2,
+   "sent": [
+    [
+     106,
+     "040024000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4pro",
+   "devtype": 24614,
+   "method": "check_sensors",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "08000000000018233314"
+   ]
+  },
+  "expect": {
+   "result": {
+    "temperature": 24.35,
+    "humidity": 51.2
+   },
+   "sent": [
+    [
+     106,
+     "040024000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4pro",
+   "devtype": 24614,
+   "method": "check_temperature",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "08000000000018233314"
+   ]
+  },
+  "expect": {
+   "result": 24.35,
+   "sent": [
+    [
+     106,
+     "040024000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4pro",
+   "devtype": 24614,
+   "method": "check_humidity",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "08000000000018233314"
+   ]
+  },
+  "expect": {
+   "result": 51.2,
+   "sent": [
+    [
+     106,
+     "040024000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4",
+   "devtype": 25278,
+   "method": "check_sensors",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "08000000000018233314"
+   ]
+  },
+  "expect": {
+   "result": {
+    "temperature": 24.35,
+    "humidity": 51.2
+   },
+   "sent": [
+    [
+     106,
+     "040024000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4",
+   "devtype": 25278,
+   "method": "check_temperature",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "08000000000018233314"
+   ]
+  },
+  "expect": {
+   "result": 24.35,
+   "sent": [
+    [
+     106,
+     "040024000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4",
+   "devtype": 25278,
+   "method": "check_humidity",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "08000000000018233314"
+   ]
+  },
+  "expect": {
+   "result": 51.2,
+   "sent": [
+    [
+     106,
+     "040024000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rmpro",
+   "devtype": 10026,
+   "method": "sweep_frequency",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "01000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "19000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rmpro",
+   "devtype": 10026,
+   "method": "check_frequency",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "0100000001009f0600"
+   ]
+  },
+  "expect": {
+   "result": [
+    true,
+    433.92
+   ],
+   "sent": [
+    [
+     106,
+     "1a000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rmpro",
+   "devtype": 10026,
+   "method": "check_frequency",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "010000000000000000"
+   ]
+  },
+  "expect": {
+   "result": [
+    false,
+    0.0
+   ],
+   "sent": [
+    [
+     106,
+     "1a000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rmpro",
+   "devtype": 10026,
+   "method": "find_rf_packet",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "01000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "1b000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rmpro",
+   "devtype": 10026,
+   "method": "find_rf_packet",
+   "args": [
+    433.92
+   ],
+   "kwargs": {},
+   "responses": [
+    "01000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "1b000000009f0600"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rmpro",
+   "devtype": 10026,
+   "method": "cancel_sweep_frequency",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "01000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "1e000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4pro",
+   "devtype": 24614,
+   "method": "sweep_frequency",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "040000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "040019000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4pro",
+   "devtype": 24614,
+   "method": "check_frequency",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "09000000000001009f0600"
+   ]
+  },
+  "expect": {
+   "result": [
+    true,
+    433.92
+   ],
+   "sent": [
+    [
+     106,
+     "04001a000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4pro",
+   "devtype": 24614,
+   "method": "check_frequency",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "0900000000000000000000"
+   ]
+  },
+  "expect": {
+   "result": [
+    false,
+    0.0
+   ],
+   "sent": [
+    [
+     106,
+     "04001a000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4pro",
+   "devtype": 24614,
+   "method": "find_rf_packet",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "040000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "04001b000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4pro",
+   "devtype": 24614,
+   "method": "find_rf_packet",
+   "args": [
+    433.92
+   ],
+   "kwargs": {},
+   "responses": [
+    "040000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "08001b000000009f0600"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4pro",
+   "devtype": 24614,
+   "method": "cancel_sweep_frequency",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "040000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "04001e000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm",
+   "devtype": 10002,
+   "method": "sweep_frequency",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "01000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "19000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm",
+   "devtype": 10002,
+   "method": "check_frequency",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "0100000001009f0600"
+   ]
+  },
+  "expect": {
+   "result": [
+    true,
+    433.92
+   ],
+   "sent": [
+    [
+     106,
+     "1a000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm",
+   "devtype": 10002,
+   "method": "check_frequency",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "010000000000000000"
+   ]
+  },
+  "expect": {
+   "result": [
+    false,
+    0.0
+   ],
+   "sent": [
+    [
+     106,
+     "1a000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm",
+   "devtype": 10002,
+   "method": "find_rf_packet",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "01000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "1b000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm",
+   "devtype": 10002,
+   "method": "find_rf_packet",
+   "args": [
+    433.92
+   ],
+   "kwargs": {},
+   "responses": [
+    "01000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "1b000000009f0600"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm",
+   "devtype": 10002,
+   "method": "cancel_sweep_frequency",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "01000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "1e000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4",
+   "devtype": 25278,
+   "method": "sweep_frequency",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "040000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "040019000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4",
+   "devtype": 25278,
+   "method": "check_frequency",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "09000000000001009f0600"
+   ]
+  },
+  "expect": {
+   "result": [
+    true,
+    433.92
+   ],
+   "sent": [
+    [
+     106,
+     "04001a000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4",
+   "devtype": 25278,
+   "method": "check_frequency",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "0900000000000000000000"
+   ]
+  },
+  "expect": {
+   "result": [
+    false,
+    0.0
+   ],
+   "sent": [
+    [
+     106,
+     "04001a000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4",
+   "devtype": 25278,
+   "method": "find_rf_packet",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "040000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "04001b000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4",
+   "devtype": 25278,
+   "method": "find_rf_packet",
+   "args": [
+    433.92
+   ],
+   "kwargs": {},
+   "responses": [
+    "040000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "08001b000000009f0600"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4",
+   "devtype": 25278,
+   "method": "cancel_sweep_frequency",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "040000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "04001e000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "sp1",
+   "devtype": 0,
+   "method": "set_power",
+   "args": [
+    true
+   ],
+   "kwargs": {},
+   "responses": [
+    "00000000000000000000000000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     102,
+     "01000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "sp1",
+   "devtype": 0,
+   "method": "set_power",
+   "args": [
+    false
+   ],
+   "kwargs": {},
+   "responses": [
+    "00000000000000000000000000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     102,
+     "00000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "sp2",
+   "devtype": 10001,
+   "method": "set_power",
+   "args": [
+    true
+   ],
+   "kwargs": {},
+   "responses": [
+    "00000000000000000000000000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "02000000010000000000000000000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "sp2",
+   "devtype": 10001,
+   "method": "check_power",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "00000000010000000000000000000000"
+   ]
+  },
+  "expect": {
+   "result": true,
+   "sent": [
+    [
+     106,
+     "01000000000000000000000000000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "sp2",
+   "devtype": 10001,
+   "method": "check_power",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "00000000000000000000000000000000"
+   ]
+  },
+  "expect": {
+   "result": false,
+   "sent": [
+    [
+     106,
+     "01000000000000000000000000000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "sp3s",
+   "devtype": 38010,
+   "method": "set_power",
+   "args": [
+    true
+   ],
+   "kwargs": {},
+   "responses": [
+    "00000000000000000000000000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "02000000010000000000000000000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "sp3s",
+   "devtype": 38010,
+   "method": "check_power",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "00000000010000000000000000000000"
+   ]
+  },
+  "expect": {
+   "result": true,
+   "sent": [
+    [
+     106,
+     "01000000000000000000000000000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "sp3s",
+   "devtype": 38010,
+   "method": "check_power",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "00000000000000000000000000000000"
+   ]
+  },
+  "expect": {
+   "result": false,
+   "sent": [
+    [
+     106,
+     "01000000000000000000000000000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "sp2s",
+   "devtype": 10024,
+   "method": "get_energy",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "00000000d20400000000000000000000"
+   ]
+  },
+  "expect": {
+   "result": 1.234,
+   "sent": [
+    [
+     106,
+     "04000000000000000000000000000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "sp3s",
+   "devtype": 38010,
+   "method": "get_energy",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "00000000003412000000000000000000"
+   ]
+  },
+  "expect": {
+   "result": 12.34,
+   "sent": [
+    [
+     106,
+     "0800fe0105010000002d"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "sp3",
+   "devtype": 30014,
+   "method": "set_power",
+   "args": [
+    true
+   ],
+   "kwargs": {},
+   "responses": [
+    "00000000030000000000000000000000",
+    "00000000000000000000000000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "01000000000000000000000000000000"
+    ],
+    [
+     106,
+     "02000000030000000000000000000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "sp3",
+   "devtype": 30014,
+   "method": "set_nightlight",
+   "args": [
+    true
+   ],
+   "kwargs": {},
+   "responses": [
+    "00000000010000000000000000000000",
+    "00000000000000000000000000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "01000000000000000000000000000000"
+    ],
+    [
+     106,
+     "02000000030000000000000000000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "sp3",
+   "devtype": 30014,
+   "method": "check_power",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "00000000030000000000000000000000"
+   ]
+  },
+  "expect": {
+   "result": true,
+   "sent": [
+    [
+     106,
+     "01000000000000000000000000000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "sp3",
+   "devtype": 30014,
+   "method": "check_nightlight",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "00000000030000000000000000000000"
+   ]
+  },
+  "expect": {
+   "result": true,
+   "sent": [
+    [
+     106,
+     "01000000000000000000000000000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "sp4",
+   "devtype": 30073,
+   "method": "get_state",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "a5a55a5a0000010b540000007b22707772223a312c226e746c69676874223a302c22696e64696361746f72223a312c226e746c6272696768746e657373223a35302c226d6178776f726b74696d65223a302c226368696c646c6f636b223a307d"
+   ]
+  },
+  "expect": {
+   "result": {
+    "pwr": 1,
+    "ntlight": 0,
+    "indicator": 1,
+    "ntlbrightness": 50,
+    "maxworktime": 0,
+    "childlock": 0
+   },
+   "sent": [
+    [
+     106,
+     "a5a55a5ab3c1010b020000007b7d"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "sp4",
+   "devtype": 30073,
+   "method": "set_power",
+   "args": [
+    true
+   ],
+   "kwargs": {},
+   "responses": [
+    "a5a55a5a0000010b540000007b22707772223a312c226e746c69676874223a302c22696e64696361746f72223a312c226e746c6272696768746e657373223a35302c226d6178776f726b74696d65223a302c226368696c646c6f636b223a307d"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "a5a55a5ac3c3020b090000007b22707772223a317d"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "sp4",
+   "devtype": 30073,
+   "method": "set_nightlight",
+   "args": [
+    false
+   ],
+   "kwargs": {},
+   "responses": [
+    "a5a55a5a0000010b540000007b22707772223a312c226e746c69676874223a302c22696e64696361746f72223a312c226e746c6272696768746e657373223a35302c226d6178776f726b74696d65223a302c226368696c646c6f636b223a307d"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "a5a55a5a67c5020b0d0000007b226e746c69676874223a307d"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "sp4",
+   "devtype": 30073,
+   "method": "set_state",
+   "args": [],
+   "kwargs": {
+    "pwr": true,
+    "ntlbrightness": 25,
+    "childlock": true
+   },
+   "responses": [
+    "a5a55a5a0000010b540000007b22707772223a312c226e746c69676874223a302c22696e64696361746f72223a312c226e746c6272696768746e657373223a35302c226d6178776f726b74696d65223a302c226368696c646c6f636b223a307d"
+   ]
+  },
+  "expect": {
+   "result": {
+    "pwr": 1,
+    "ntlight": 0,
+    "indicator": 1,
+    "ntlbrightness": 50,
+    "maxworktime": 0,
+    "childlock": 0
+   },
+   "sent": [
+    [
+     106,
+     "a5a55a5a04cf020b2a0000007b22707772223a312c226e746c6272696768746e657373223a32352c226368696c646c6f636b223a317d"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "sp4",
+   "devtype": 30073,
+   "method": "check_power",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "a5a55a5a0000010b540000007b22707772223a312c226e746c69676874223a302c22696e64696361746f72223a312c226e746c6272696768746e657373223a35302c226d6178776f726b74696d65223a302c226368696c646c6f636b223a307d"
+   ]
+  },
+  "expect": {
+   "result": true,
+   "sent": [
+    [
+     106,
+     "a5a55a5ab3c1010b020000007b7d"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "sp4",
+   "devtype": 30073,
+   "method": "check_nightlight",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "a5a55a5a0000010b540000007b22707772223a312c226e746c69676874223a302c22696e64696361746f72223a312c226e746c6272696768746e657373223a35302c226d6178776f726b74696d65223a302c226368696c646c6f636b223a307d"
+   ]
+  },
+  "expect": {
+   "result": false,
+   "sent": [
+    [
+     106,
+     "a5a55a5ab3c1010b020000007b7d"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "sp4b",
+   "devtype": 20757,
+   "method": "get_state",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "a800a5a55a5a0000010b9c0000007b22707772223a312c226e746c69676874223a302c22696e64696361746f72223a312c226e746c6272696768746e657373223a35302c226d6178776f726b74696d65223a302c226368696c646c6f636b223a302c2263757272656e74223a3132302c22766f6c74223a3233303530302c22706f776572223a32373630302c22746f74616c636f6e73756d223a2d312c226f7665726c6f6164223a307d"
+   ]
+  },
+  "expect": {
+   "result": {
+    "pwr": 1,
+    "ntlight": 0,
+    "indicator": 1,
+    "ntlbrightness": 50,
+    "maxworktime": 0,
+    "childlock": 0,
+    "current": 0.12,
+    "volt": 230.5,
+    "power": 27.6,
+    "overload": 0.0
+   },
+   "sent": [
+    [
+     106,
+     "0e00a5a55a5ab3c1010b020000007b7d"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "sp4b",
+   "devtype": 20757,
+   "method": "set_state",
+   "args": [],
+   "kwargs": {
+    "pwr": false
+   },
+   "responses": [
+    "a800a5a55a5a0000010b9c0000007b22707772223a312c226e746c69676874223a302c22696e64696361746f72223a312c226e746c6272696768746e657373223a35302c226d6178776f726b74696d65223a302c226368696c646c6f636b223a302c2263757272656e74223a3132302c22766f6c74223a3233303530302c22706f776572223a32373630302c22746f74616c636f6e73756d223a2d312c226f7665726c6f6164223a307d"
+   ]
+  },
+  "expect": {
+   "result": {
+    "pwr": 1,
+    "ntlight": 0,
+    "indicator": 1,
+    "ntlbrightness": 50,
+    "maxworktime": 0,
+    "childlock": 0,
+    "current": 120,
+    "volt": 230500,
+    "power": 27600,
+    "totalconsum": -1,
+    "overload": 0
+   },
+   "sent": [
+    [
+     106,
+     "1500a5a55a5ac2c3020b090000007b22707772223a307d"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "sp4b",
+   "devtype": 20757,
+   "method": "check_power",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "a800a5a55a5a0000010b9c0000007b22707772223a312c226e746c69676874223a302c22696e64696361746f72223a312c226e746c6272696768746e657373223a35302c226d6178776f726b74696d65223a302c226368696c646c6f636b223a302c2263757272656e74223a3132302c22766f6c74223a3233303530302c22706f776572223a32373630302c22746f74616c636f6e73756d223a2d312c226f7665726c6f6164223a307d"
+   ]
+  },
+  "expect": {
+   "result": true,
+   "sent": [
+    [
+     106,
+     "0e00a5a55a5ab3c1010b020000007b7d"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "bg1",
+   "devtype": 20963,
+   "method": "get_state",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "6e00a5a55a5a0000010b620000007b22707772223a312c2270777231223a312c2270777232223a302c226d6178776f726b74696d65223a36302c226d6178776f726b74696d6531223a36302c226d6178776f726b74696d6532223a302c226964636272696768746e657373223a35307d"
+   ]
+  },
+  "expect": {
+   "result": {
+    "pwr": 1,
+    "pwr1": 1,
+    "pwr2": 0,
+    "maxworktime": 60,
+    "maxworktime1": 60,
+    "maxworktime2": 0,
+    "idcbrightness": 50
+   },
+   "sent": [
+    [
+     106,
+     "0e00a5a55a5ab3c1010b020000007b7d"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "bg1",
+   "devtype": 20963,
+   "method": "set_state",
+   "args": [],
+   "kwargs": {
+    "pwr1": true,
+    "maxworktime2": 15
+   },
+   "responses": [
+    "6e00a5a55a5a0000010b620000007b22707772223a312c2270777231223a312c2270777232223a302c226d6178776f726b74696d65223a36302c226d6178776f726b74696d6531223a36302c226d6178776f726b74696d6532223a302c226964636272696768746e657373223a35307d"
+   ]
+  },
+  "expect": {
+   "result": {
+    "pwr": 1,
+    "pwr1": 1,
+    "pwr2": 0,
+    "maxworktime": 60,
+    "maxworktime1": 60,
+    "maxworktime2": 0,
+    "idcbrightness": 50
+   },
+   "sent": [
+    [
+     106,
+     "2b00a5a55a5a64ca020b1f0000007b2270777231223a20312c20226d6178776f726b74696d6532223a2031357d"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "ehc31",
+   "devtype": 25728,
+   "method": "get_state",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "6e00a5a55a5a0000010b620000007b22707772223a312c2270777231223a312c2270777232223a302c226d6178776f726b74696d65223a36302c226d6178776f726b74696d6531223a36302c226d6178776f726b74696d6532223a302c226964636272696768746e657373223a35307d"
+   ]
+  },
+  "expect": {
+   "result": {
+    "pwr": 1,
+    "pwr1": 1,
+    "pwr2": 0,
+    "maxworktime": 60,
+    "maxworktime1": 60,
+    "maxworktime2": 0,
+    "idcbrightness": 50
+   },
+   "sent": [
+    [
+     106,
+     "0e00a5a55a5ab3c1010b020000007b7d"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "ehc31",
+   "devtype": 25728,
+   "method": "set_state",
+   "args": [],
+   "kwargs": {
+    "pwr3": true,
+    "childlock": true,
+    "childlock4": false
+   },
+   "responses": [
+    "6e00a5a55a5a0000010b620000007b22707772223a312c2270777231223a312c2270777232223a302c226d6178776f726b74696d65223a36302c226d6178776f726b74696d6531223a36302c226d6178776f726b74696d6532223a302c226964636272696768746e657373223a35307d"
+   ]
+  },
+  "expect": {
+   "result": {
+    "pwr": 1,
+    "pwr1": 1,
+    "pwr2": 0,
+    "maxworktime": 60,
+    "maxworktime1": 60,
+    "maxworktime2": 0,
+    "idcbrightness": 50
+   },
+   "sent": [
+    [
+     106,
+     "3800a5a55a5afccd020b2c0000007b2270777233223a20312c20226368696c646c6f636b223a20312c20226368696c646c6f636b34223a20307d"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "mp1",
+   "devtype": 20149,
+   "method": "set_power_mask",
+   "args": [
+    5,
+    true
+   ],
+   "kwargs": {},
+   "responses": [
+    "00000000000000000000000000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "0d00a5a55a5abcc00200030000050500"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "mp1",
+   "devtype": 20149,
+   "method": "set_power",
+   "args": [
+    1,
+    true
+   ],
+   "kwargs": {},
+   "responses": [
+    "00000000000000000000000000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "0d00a5a55a5ab4c00200030000010100"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "mp1",
+   "devtype": 20149,
+   "method": "set_power",
+   "args": [
+    3,
+    false
+   ],
+   "kwargs": {},
+   "responses": [
+    "00000000000000000000000000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "0d00a5a55a5ab6c00200030000040000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "mp1",
+   "devtype": 20149,
+   "method": "check_power_raw",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "00000000000000000000000000000b00"
+   ]
+  },
+  "expect": {
+   "result": 11,
+   "sent": [
+    [
+     106,
+     "0a00a5a55a5aaec00100000000000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "mp1",
+   "devtype": 20149,
+   "method": "check_power",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "00000000000000000000000000000b00"
+   ]
+  },
+  "expect": {
+   "result": {
+    "s1": true,
+    "s2": true,
+    "s3": false,
+    "s4": true
+   },
+   "sent": [
+    [
+     106,
+     "0a00a5a55a5aaec00100000000000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "mp1s",
+   "devtype": 20251,
+   "method": "get_state",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "0000012345678901234567890123456789012345678901234567890123000000"
+   ]
+  },
+  "expect": {
+   "result": {
+    "volt": 230.1,
+    "current": 89.6745,
+    "power": 4523.01,
+    "totalconsum": 230189.67
+   },
+   "sent": [
+    [
+     106,
+     "0e00a5a55a5ab2c00100040000000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "mp1s",
+   "devtype": 20251,
+   "method": "check_power",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "00000000000000000000000000000b00"
+   ]
+  },
+  "expect": {
+   "result": {
+    "s1": true,
+    "s2": true,
+    "s3": false,
+    "s4": true
+   },
+   "sent": [
+    [
+     106,
+     "0a00a5a55a5aaec00100000000000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "a1",
+   "devtype": 10004,
+   "method": "check_sensors",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "0000000017052d020200010000000000"
+   ]
+  },
+  "expect": {
+   "result": {
+    "temperature": 23.5,
+    "humidity": 45.2,
+    "light": "normal",
+    "air_quality": "good",
+    "noise": "quiet"
+   },
+   "sent": [
+    [
+     106,
+     "01"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "a1",
+   "devtype": 10004,
+   "method": "check_sensors",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "0000000017052d020900090009000000"
+   ]
+  },
+  "expect": {
+   "result": {
+    "temperature": 23.5,
+    "humidity": 45.2,
+    "light": "unknown",
+    "air_quality": "unknown",
+    "noise": "unknown"
+   },
+   "sent": [
+    [
+     106,
+     "01"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "a1",
+   "devtype": 10004,
+   "method": "check_sensors_raw",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "0000000017052d020200010000000000"
+   ]
+  },
+  "expect": {
+   "result": {
+    "temperature": 23.5,
+    "humidity": 45.2,
+    "light": 2,
+    "air_quality": 1,
+    "noise": 0
+   },
+   "sent": [
+    [
+     106,
+     "01"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "a2",
+   "devtype": 20320,
+   "method": "check_sensors_raw",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "00000000000000000000000000000c0007000300eb01c400"
+   ]
+  },
+  "expect": {
+   "result": {
+    "temperature": 235,
+    "humidity": 452,
+    "pm10": 12,
+    "pm2_5": 7,
+    "pm1": 3
+   },
+   "sent": [
+    [
+     106,
+     "0a00a5a55a5ab9c0010b0000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "lb1",
+   "devtype": 24775,
+   "method": "get_state",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "e500a5a55a5a0000010bd90000007b22726564223a3132382c22626c7565223a3235352c22677265656e223a3132382c22707772223a312c226272696768746e657373223a37352c22636f6c6f7274656d70223a323730302c22687565223a3234302c2273617475726174696f6e223a35302c227472616e736974696f6e6475726174696f6e223a313530302c226d6178776f726b74696d65223a302c2262756c625f636f6c6f726d6f6465223a312c2262756c625f7363656e6573223a225b5d222c2262756c625f7363656e65223a22222c2262756c625f7363656e65696478223a3235357d"
+   ]
+  },
+  "expect": {
+   "result": {
+    "red": 128,
+    "blue": 255,
+    "green": 128,
+    "pwr": 1,
+    "brightness": 75,
+    "colortemp": 2700,
+    "hue": 240,
+    "saturation": 50,
+    "transitionduration": 1500,
+    "maxworktime": 0,
+    "bulb_colormode": 1,
+    "bulb_scenes": "[]",
+    "bulb_scene": "",
+    "bulb_sceneidx": 255
+   },
+   "sent": [
+    [
+     106,
+     "0e00a5a55a5ab3c1010b020000007b7d"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "lb1",
+   "devtype": 24775,
+   "method": "set_state",
+   "args": [],
+   "kwargs": {
+    "pwr": true,
+    "brightness": 50,
+    "bulb_colormode": 1,
+    "bulb_scene": ""
+   },
+   "responses": [
+    "e500a5a55a5a0000010bd90000007b22726564223a3132382c22626c7565223a3235352c22677265656e223a3132382c22707772223a312c226272696768746e657373223a37352c22636f6c6f7274656d70223a323730302c22687565223a3234302c2273617475726174696f6e223a35302c227472616e736974696f6e6475726174696f6e223a313530302c226d6178776f726b74696d65223a302c2262756c625f636f6c6f726d6f6465223a312c2262756c625f7363656e6573223a225b5d222c2262756c625f7363656e65223a22222c2262756c625f7363656e65696478223a3235357d"
+   ]
+  },
+  "expect": {
+   "result": {
+    "red": 128,
+    "blue": 255,
+    "green": 128,
+    "pwr": 1,
+    "brightness": 75,
+    "colortemp": 2700,
+    "hue": 240,
+    "saturation": 50,
+    "transitionduration": 1500,
+    "maxworktime": 0,
+    "bulb_colormode": 1,
+    "bulb_scenes": "[]",
+    "bulb_scene": "",
+    "bulb_sceneidx": 255
+   },
+   "sent": [
+    [
+     106,
+     "4800a5a55a5ae1d4020b3c0000007b22707772223a312c226272696768746e657373223a35302c2262756c625f636f6c6f726d6f6465223a312c2262756c625f7363656e65223a22227d"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "lb2",
+   "devtype": 42228,
+   "method": "get_state",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "a5a55a5a0000010bd90000007b22726564223a3132382c22626c7565223a3235352c22677265656e223a3132382c22707772223a312c226272696768746e657373223a37352c22636f6c6f7274656d70223a323730302c22687565223a3234302c2273617475726174696f6e223a35302c227472616e736974696f6e6475726174696f6e223a313530302c226d6178776f726b74696d65223a302c2262756c625f636f6c6f726d6f6465223a312c2262756c625f7363656e6573223a225b5d222c2262756c625f7363656e65223a22222c2262756c625f7363656e65696478223a3235357d"
+   ]
+  },
+  "expect": {
+   "result": {
+    "red": 128,
+    "blue": 255,
+    "green": 128,
+    "pwr": 1,
+    "brightness": 75,
+    "colortemp": 2700,
+    "hue": 240,
+    "saturation": 50,
+    "transitionduration": 1500,
+    "maxworktime": 0,
+    "bulb_colormode": 1,
+    "bulb_scenes": "[]",
+    "bulb_scene": "",
+    "bulb_sceneidx": 255
+   },
+   "sent": [
+    [
+     106,
+     "a5a55a5ab3c1010b020000007b7d"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "lb2",
+   "devtype": 42228,
+   "method": "set_state",
+   "args": [],
+   "kwargs": {
+    "pwr": false,
+    "red": 1,
+    "green": 2,
+    "blue": 3,
+    "transitionduration": 200
+   },
+   "responses": [
+    "a5a55a5a0000010bd90000007b22726564223a3132382c22626c7565223a3235352c22677265656e223a3132382c22707772223a312c226272696768746e657373223a37352c22636f6c6f7274656d70223a323730302c22687565223a3234302c2273617475726174696f6e223a35302c227472616e736974696f6e6475726174696f6e223a313530302c226d6178776f726b74696d65223a302c2262756c625f636f6c6f726d6f6465223a312c2262756c625f7363656e6573223a225b5d222c2262756c625f7363656e65223a22222c2262756c625f7363656e65696478223a3235357d"
+   ]
+  },
+  "expect": {
+   "result": {
+    "red": 128,
+    "blue": 255,
+    "green": 128,
+    "pwr": 1,
+    "brightness": 75,
+    "colortemp": 2700,
+    "hue": 240,
+    "saturation": 50,
+    "transitionduration": 1500,
+    "maxworktime": 0,
+    "bulb_colormode": 1,
+    "bulb_scenes": "[]",
+    "bulb_scene": "",
+    "bulb_sceneidx": 255
+   },
+   "sent": [
+    [
+     106,
+     "a5a55a5a6bd4020b3d0000007b22707772223a302c22726564223a312c22626c7565223a332c22677265656e223a322c227472616e736974696f6e6475726174696f6e223a3230307d"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "hysen",
+   "devtype": 20141,
+   "method": "send_request",
+   "args": [
+    [
+     1,
+     3,
+     0,
+     0,
+     0,
+     8
+    ]
+   ],
+   "kwargs": {},
+   "responses": [
+    "320000000001d12b2c21002a022305fffb000120320e1e0503060f070f080f090f0a0f0b0f0c0f0d0f28292a2b2c2d2e2f00451c"
+   ]
+  },
+  "expect": {
+   "result": {
+    "__bytes__": "00000001d12b2c21002a022305fffb000120320e1e0503060f070f080f090f0a0f0b0f0c0f0d0f28292a2b2c2d2e2f00"
+   },
+   "sent": [
+    [
+     106,
+     "0800010300000008440c"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "hysen",
+   "devtype": 20141,
+   "method": "get_temp",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "320000000001d12b2c21002a022305fffb000120320e1e0503060f070f080f090f0a0f0b0f0c0f0d0f28292a2b2c2d2e2f00451c"
+   ]
+  },
+  "expect": {
+   "result": 21.5,
+   "sent": [
+    [
+     106,
+     "0800010300000008440c"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "hysen",
+   "devtype": 20141,
+   "method": "get_external_temp",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "320000000001d12b2c21002a022305fffb000120320e1e0503060f070f080f090f0a0f0b0f0c0f0d0f28292a2b2c2d2e2f00451c"
+   ]
+  },
+  "expect": {
+   "result": 25.0,
+   "sent": [
+    [
+     106,
+     "0800010300000008440c"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "hysen",
+   "devtype": 20141,
+   "method": "get_full_status",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "320000000001d12b2c21002a022305fffb000120320e1e0503060f070f080f090f0a0f0b0f0c0f0d0f28292a2b2c2d2e2f00451c"
+   ]
+  },
+  "expect": {
+   "result": {
+    "remote_lock": 1,
+    "power": 1,
+    "active": 1,
+    "temp_manual": 1,
+    "heating_cooling": 1,
+    "room_temp": 21.5,
+    "thermostat_temp": 22.0,
+    "auto_mode": 1,
+    "loop_mode": 2,
+    "sensor": 0,
+    "osv": 42,
+    "dif": 2,
+    "svh": 35,
+    "svl": 5,
+    "room_temp_adj": -0.5,
+    "fre": 0,
+    "poweron": 1,
+    "unknown": 32,
+    "external_temp": 25.0,
+    "hour": 14,
+    "min": 30,
+    "sec": 5,
+    "dayofweek": 3,
+    "weekday": [
+     {
+      "start_hour": 6,
+      "start_minute": 15,
+      "temp": 20.0
+     },
+     {
+      "start_hour": 7,
+      "start_minute": 15,
+      "temp": 20.5
+     },
+     {
+      "start_hour": 8,
+      "start_minute": 15,
+      "temp": 21.0
+     },
+     {
+      "start_hour": 9,
+      "start_minute": 15,
+      "temp": 21.5
+     },
+     {
+      "start_hour": 10,
+      "start_minute": 15,
+      "temp": 22.0
+     },
+     {
+      "start_hour": 11,
+      "start_minute": 15,
+      "temp": 22.5
+     }
+    ],
+    "weekend": [
+     {
+      "start_hour": 12,
+      "start_minute": 15,
+      "temp": 23.0
+     },
+     {
+      "start_hour": 13,
+      "start_minute": 15,
+      "temp": 23.5
+     }
+    ]
+   },
+   "sent": [
+    [
+     106,
+     "0800010300000016c404"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "hysen",
+   "devtype": 20141,
+   "method": "set_mode",
+   "args": [
+    1,
+    2
+   ],
+   "kwargs": {},
+   "responses": [
+    "0800010600022100305a"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "08000106000231003d9a"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "hysen",
+   "devtype": 20141,
+   "method": "set_mode",
+   "args": [
+    0,
+    0,
+    1
+   ],
+   "kwargs": {},
+   "responses": [
+    "0800010600022100305a"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "0800010600021001e40a"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "hysen",
+   "devtype": 20141,
+   "method": "set_advanced",
+   "args": [
+    0,
+    0,
+    42,
+    2,
+    35,
+    5,
+    -0.5,
+    0,
+    1
+   ],
+   "kwargs": {},
+   "responses": [
+    "0800010600022100305a"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "13000110000200050a00002a022305fffb0001e8eb"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "hysen",
+   "devtype": 20141,
+   "method": "switch_to_auto",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "0800010600022100305a"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "0800010600021100245a"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "hysen",
+   "devtype": 20141,
+   "method": "switch_to_manual",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "0800010600022100305a"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "080001060002100025ca"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "hysen",
+   "devtype": 20141,
+   "method": "set_temp",
+   "args": [
+    21.5
+   ],
+   "kwargs": {},
+   "responses": [
+    "0800010600022100305a"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "080001060001002b9815"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "hysen",
+   "devtype": 20141,
+   "method": "set_power",
+   "args": [
+    1,
+    0,
+    1
+   ],
+   "kwargs": {},
+   "responses": [
+    "0800010600022100305a"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "080001060000008149aa"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "hysen",
+   "devtype": 20141,
+   "method": "set_time",
+   "args": [
+    14,
+    30,
+    5,
+    3
+   ],
+   "kwargs": {},
+   "responses": [
+    "0800010600022100305a"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "0d00011000080002040e1e0503d3b6"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "hysen",
+   "devtype": 20141,
+   "method": "set_schedule",
+   "args": [
+    [
+     {
+      "start_hour": 6,
+      "start_minute": 15,
+      "temp": 20
+     },
+     {
+      "start_hour": 7,
+      "start_minute": 15,
+      "temp": 21
+     },
+     {
+      "start_hour": 8,
+      "start_minute": 15,
+      "temp": 22
+     },
+     {
+      "start_hour": 9,
+      "start_minute": 15,
+      "temp": 23
+     },
+     {
+      "start_hour": 10,
+      "start_minute": 15,
+      "temp": 24
+     },
+     {
+      "start_hour": 11,
+      "start_minute": 15,
+      "temp": 25
+     }
+    ],
+    [
+     {
+      "start_hour": 8,
+      "start_minute": 0,
+      "temp": 21
+     },
+     {
+      "start_hour": 22,
+      "start_minute": 30,
+      "temp": 17.5
+     }
+    ]
+   ],
+   "kwargs": {},
+   "responses": [
+    "0800010600022100305a"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "21000110000a000c18060f070f080f090f0a0f0b0f0800161e282a2c2e30322a2312ca"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "hysen",
+   "devtype": 20141,
+   "method": "get_temp",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "320000000001d12b2c21002a022305fffb000120320e1e0503060f070f080f090f0a0f0b0f0c0f0d0f28292a2b2c2d2e2f0045e3"
+   ]
+  },
+  "expect": {
+   "error": "DataValidationError: [Errno -4008] Received data packet check error: Expected a checksum of 58181 and received 7237",
+   "sent": [
+    [
+     106,
+     "0800010300000008440c"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "hvac",
+   "devtype": 20010,
+   "method": "get_state",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "1900bb00070000000f00000082e4004040240000270010000096af"
+   ]
+  },
+  "expect": {
+   "result": {
+    "power": true,
+    "target_temp": 24.0,
+    "swing_v": 2,
+    "swing_h": 7,
+    "mode": 1,
+    "speed": 2,
+    "preset": 1,
+    "sleep": true,
+    "ifeel": false,
+    "health": true,
+    "clean": true,
+    "display": true,
+    "mildew": false
+   },
+   "sent": [
+    [
+     106,
+     "0c00bb0006800000020011014768"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "hvac",
+   "devtype": 20010,
+   "method": "get_ac_info",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "2200bb00070000001800000000010000001a00000000000000000000000000000005a5e0"
+   ]
+  },
+  "expect": {
+   "result": {
+    "power": 1,
+    "ambient_temp": 26.5
+   },
+   "sent": [
+    [
+     106,
+     "0c00bb0006800000020021018f90"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "hvac",
+   "devtype": 20010,
+   "method": "get_state",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "0d00bb000700000003000000013273"
+   ]
+  },
+  "expect": {
+   "error": "DataValidationError: [Errno -4007] Received data packet length error: Expected at least 15 bytes and received 3",
+   "sent": [
+    [
+     106,
+     "0c00bb0006800000020011014768"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "hvac",
+   "devtype": 20010,
+   "method": "set_state",
+   "args": [
+    true,
+    22.5,
+    1,
+    2,
+    0,
+    7,
+    0,
+    false,
+    false,
+    true,
+    false,
+    false,
+    false
+   ],
+   "kwargs": {},
+   "responses": [
+    "1900bb00070000000f00000082e4004040240000270010000096af"
+   ]
+  },
+  "expect": {
+   "result": {
+    "power": true,
+    "target_temp": 24.0,
+    "swing_v": 2,
+    "swing_h": 7,
+    "mode": 1,
+    "speed": 2,
+    "preset": 1,
+    "sleep": true,
+    "ifeel": false,
+    "health": true,
+    "clean": true,
+    "display": true,
+    "mildew": false
+   },
+   "sent": [
+    [
+     106,
+     "1900bb00068000000f00010170e48d4000200000200010000577f6"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "hvac",
+   "devtype": 20010,
+   "method": "set_state",
+   "args": [
+    true,
+    24,
+    4,
+    3,
+    2,
+    0,
+    0,
+    false,
+    false,
+    true,
+    false,
+    false,
+    false
+   ],
+   "kwargs": {},
+   "responses": [
+    "1900bb00070000000f00000082e4004040240000270010000096af"
+   ]
+  },
+  "expect": {
+   "result": {
+    "power": true,
+    "target_temp": 24.0,
+    "swing_v": 2,
+    "swing_h": 7,
+    "mode": 1,
+    "speed": 2,
+    "preset": 1,
+    "sleep": true,
+    "ifeel": false,
+    "health": true,
+    "clean": true,
+    "display": true,
+    "mildew": false
+   },
+   "sent": [
+    [
+     106,
+     "1900bb00068000000f00010180040d608080000020001000058a9b"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "hvac",
+   "devtype": 20010,
+   "method": "set_state",
+   "args": [
+    true,
+    24,
+    2,
+    1,
+    1,
+    0,
+    0,
+    false,
+    false,
+    true,
+    false,
+    false,
+    false
+   ],
+   "kwargs": {},
+   "responses": [
+    "1900bb00070000000f00000082e4004040240000270010000096af"
+   ]
+  },
+  "expect": {
+   "error": "ValueError: turbo is only available in cooling/heating",
+   "sent": [],
+   "unused_responses": 1
+  }
+ },
+ {
+  "case": {
+   "cls": "dooya",
+   "devtype": 20045,
+   "method": "open",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "00000000320000000000000000000000"
+   ]
+  },
+  "expect": {
+   "result": 50,
+   "sent": [
+    [
+     106,
+     "0900bb010000000000fa440000000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "dooya",
+   "devtype": 20045,
+   "method": "close",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "00000000320000000000000000000000"
+   ]
+  },
+  "expect": {
+   "result": 50,
+   "sent": [
+    [
+     106,
+     "0900bb020000000000fa440000000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "dooya",
+   "devtype": 20045,
+   "method": "stop",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "00000000320000000000000000000000"
+   ]
+  },
+  "expect": {
+   "result": 50,
+   "sent": [
+    [
+     106,
+     "0900bb030000000000fa440000000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "dooya",
+   "devtype": 20045,
+   "method": "get_percentage",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "00000000320000000000000000000000"
+   ]
+  },
+  "expect": {
+   "result": 50,
+   "sent": [
+    [
+     106,
+     "0900bb065d00000000fa440000000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "dooya",
+   "devtype": 20045,
+   "method": "set_percentage_and_wait",
+   "args": [
+    50
+   ],
+   "kwargs": {},
+   "responses": [
+    "00000000320000000000000000000000",
+    "00000000320000000000000000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "0900bb065d00000000fa440000000000"
+    ],
+    [
+     106,
+     "0900bb030000000000fa440000000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "dooya2",
+   "devtype": 20334,
+   "method": "open",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "000000000000000000000000000000000028000000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "0f00a5a55a5abec0020b03000000000100"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "dooya2",
+   "devtype": 20334,
+   "method": "close",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "000000000000000000000000000000000028000000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "0f00a5a55a5abfc0020b03000000000200"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "dooya2",
+   "devtype": 20334,
+   "method": "stop",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "000000000000000000000000000000000028000000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "0f00a5a55a5ac0c0020b03000000000300"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "dooya2",
+   "devtype": 20334,
+   "method": "get_percentage",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "000000000000000000000000000000000028000000000000"
+   ]
+  },
+  "expect": {
+   "result": 40,
+   "sent": [
+    [
+     106,
+     "0f00a5a55a5ac2c0010b03000000000600"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "dooya2",
+   "devtype": 20334,
+   "method": "set_percentage",
+   "args": [
+    40
+   ],
+   "kwargs": {},
+   "responses": [
+    "000000000000000000000000000000000028000000000000"
+   ]
+  },
+  "expect": {
+   "result": null,
+   "sent": [
+    [
+     106,
+     "0f00a5a55a5aeec0020b03000000000928"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "wser",
+   "devtype": 20334,
+   "method": "get_position",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "00000000000000000000000000001e00"
+   ]
+  },
+  "expect": {
+   "result": 30,
+   "sent": [
+    [
+     106,
+     "0a00a5a55a5ab9c0010b0000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "wser",
+   "devtype": 20334,
+   "method": "open",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "00000000000000000000000000001e00"
+   ]
+  },
+  "expect": {
+   "result": 30,
+   "sent": [
+    [
+     106,
+     "0f00a5a55a5ad8c1020b030000004a31a0"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "wser",
+   "devtype": 20334,
+   "method": "close",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "00000000000000000000000000001e00"
+   ]
+  },
+  "expect": {
+   "result": 30,
+   "sent": [
+    [
+     106,
+     "0f00a5a55a5af0c1020b030000006132a0"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "wser",
+   "devtype": 20334,
+   "method": "stop",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "00000000000000000000000000001e00"
+   ]
+  },
+  "expect": {
+   "result": 30,
+   "sent": [
+    [
+     106,
+     "0f00a5a55a5a1cc2020b030000004c73a0"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "wser",
+   "devtype": 20334,
+   "method": "set_position",
+   "args": [
+    30
+   ],
+   "kwargs": {},
+   "responses": [
+    "00000000000000000000000000001e00"
+   ]
+  },
+  "expect": {
+   "result": 30,
+   "sent": [
+    [
+     106,
+     "0f00a5a55a5aebc1020b030000001e70a0"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "s3",
+   "devtype": 42396,
+   "method": "get_subdevices",
+   "args": [
+    2
+   ],
+   "kwargs": {},
+   "responses": [
+    "a5a55a5a0000010b400000007b22746f74616c223a332c226c697374223a5b7b22646964223a226131222c2270777231223a317d2c7b22646964223a226132222c2270777231223a307d5d7d",
+    "a5a55a5a0000010b400000007b22746f74616c223a332c226c697374223a5b7b22646964223a226132222c2270777231223a307d2c7b22646964223a226133222c2270777231223a317d5d7d"
+   ]
+  },
+  "expect": {
+   "result": [
+    {
+     "did": "a1",
+     "pwr1": 1
+    },
+    {
+     "did": "a2",
+     "pwr1": 0
+    },
+    {
+     "did": "a3",
+     "pwr1": 1
+    }
+   ],
+   "sent": [
+    [
+     106,
+     "a5a55a5a9ec70e0b150000007b22636f756e74223a322c22696e646578223a307d"
+    ],
+    [
+     106,
+     "a5a55a5aa0c70e0b150000007b22636f756e74223a322c22696e646578223a327d"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "s3",
+   "devtype": 42396,
+   "method": "get_state",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "a5a55a5a0000010b0a0000007b2270777231223a317d"
+   ]
+  },
+  "expect": {
+   "result": {
+    "pwr1": 1
+   },
+   "sent": [
+    [
+     106,
+     "a5a55a5ab3c1010b020000007b7d"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "s3",
+   "devtype": 42396,
+   "method": "get_state",
+   "args": [
+    "a1"
+   ],
+   "kwargs": {},
+   "responses": [
+    "a5a55a5a0000010b0a0000007b2270777231223a317d"
+   ]
+  },
+  "expect": {
+   "result": {
+    "pwr1": 1
+   },
+   "sent": [
+    [
+     106,
+     "a5a55a5a42c4010b0c0000007b22646964223a226131227d"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "s3",
+   "devtype": 42396,
+   "method": "set_state",
+   "args": [
+    "a1",
+    true,
+    null,
+    false
+   ],
+   "kwargs": {},
+   "responses": [
+    "a5a55a5a0000010b130000007b2270777231223a312c2270777233223a307d"
+   ]
+  },
+  "expect": {
+   "result": {
+    "pwr1": 1,
+    "pwr3": 0
+   },
+   "sent": [
+    [
+     106,
+     "a5a55a5a20c9020b1e0000007b22646964223a226131222c2270777231223a312c2270777233223a307d"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "S1C",
+   "devtype": 10018,
+   "method": "get_sensors_status",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "0000000002000101003146726f6e7420646f6f720000000000000000000000000102030400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002002148616c6c0000000000000000000000000000000000000a0b0c0d00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003009100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+   ]
+  },
+  "expect": {
+   "result": {
+    "count": 2,
+    "sensors": [
+     {
+      "status": 1,
+      "name": "Front door",
+      "type": "Door Sensor",
+      "order": 1,
+      "serial": "01020304"
+     },
+     {
+      "status": 0,
+      "name": "Hall",
+      "type": "Motion Sensor",
+      "order": 2,
+      "serial": "0a0b0c0d"
+     }
+    ]
+   },
+   "sent": [
+    [
+     106,
+     "06000000000000000000000000000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rm4mini",
+   "devtype": 20954,
+   "method": "check_data",
+   "args": [],
+   "kwargs": {},
+   "responses": []
+  },
+  "expect": {
+   "error": "AssertionError: method sent more packets than canned responses (1 sent)",
+   "sent": [
+    [
+     106,
+     "040004000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "rmmini",
+   "devtype": 10039,
+   "method": "enter_learning",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "00000000000000000000000000000000"
+   ],
+   "error_code": 65531
+  },
+  "expect": {
+   "error": "StorageError: [Errno -5] The device storage is full",
+   "sent": [
+    [
+     106,
+     "03000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ },
+ {
+  "case": {
+   "cls": "sp2",
+   "devtype": 10001,
+   "method": "check_power",
+   "args": [],
+   "kwargs": {},
+   "responses": [
+    "00000000000000000000000000000000"
+   ],
+   "error_code": 65529
+  },
+  "expect": {
+   "error": "AuthorizationError: [Errno -7] Control key is expired",
+   "sent": [
+    [
+     106,
+     "01000000000000000000000000000000"
+    ]
+   ],
+   "unused_responses": 0
+  }
+ }
+]

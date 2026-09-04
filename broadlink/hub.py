@@ -1,6 +1,6 @@
 """Support for hubs."""
-import struct
 import json
+import struct
 from typing import Optional
 
 from . import exceptions as e

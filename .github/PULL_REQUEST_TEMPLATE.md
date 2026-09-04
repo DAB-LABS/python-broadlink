@@ -1,10 +1,8 @@
 <!--
-  You are amazing! Thanks for contributing to our project!
-  Please fill the template to help maintainers processing your PR.
+  Thanks for contributing. Please fill in the sections below; it helps the
+  maintainer process your change.
 
-  Don't forget to create the PR against the correct branch:
-  - new product id -> new_product_ids
-  - anything else -> dev
+  Open the pull request against the master branch.
 -->
 ## Context
 <!--
@@ -21,8 +19,7 @@
 
 ## Type of change
 <!--
-  What type of change does your PR introduce?
-  Please, check only 1 box!
+  Check one.
 -->
 
 - [ ] Dependency upgrade
@@ -41,15 +38,10 @@
 
 - This PR fixes issue: fixes #
 - This PR is related to: 
-- Link to documentation pull request: 
 
 ## Checklist
-<!--
-  Please do your best to check these boxes.
--->
 
-- [ ] The code change is tested and works locally.
-- [ ] The code has been formatted using Black.
-- [ ] The code follows the [Zen of Python](https://www.python.org/dev/peps/pep-0020/).
-- [ ] I am creating the Pull Request against the correct branch.
-- [ ] Documentation added/updated.
+- [ ] The code change is tested and works locally (`pytest`).
+- [ ] `ruff check .` passes.
+- [ ] New device support was verified on real hardware, or the PR says it was not.
+- [ ] `CHANGELOG.md` has an entry under Unreleased.

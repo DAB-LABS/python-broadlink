@@ -1,7 +1,7 @@
 """Support for Broadlink devices."""
+import random
 import socket
 import threading
-import random
 import time
 from typing import Generator, Optional, Tuple, Union
 
