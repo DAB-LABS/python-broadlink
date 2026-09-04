@@ -1,6 +1,20 @@
 # python-broadlink
 
-A Python module and CLI for controlling Broadlink devices locally. The following devices are supported:
+A Python module and CLI for controlling Broadlink devices locally.
+
+> **About this fork.** This repository is a maintained fork of
+> [mjg59/python-broadlink](https://github.com/mjg59/python-broadlink), which
+> has not accepted changes since 2024. It exists so that Home Assistant's
+> Broadlink integration has a library that can take fixes and new devices.
+> The distribution on PyPI is `python-broadlink`; the import name stays
+> `broadlink`. The first release corrects the IR timing constant reported in
+> upstream [#839](https://github.com/mjg59/python-broadlink/issues/839)
+> (fix in [#841](https://github.com/mjg59/python-broadlink/pull/841)) and
+> adds the devices waiting in upstream's pull request queue, including the
+> RM Max and RM5 Plus. Version 1.0 will be asynchronous; see `CHANGELOG.md`.
+> Upstream's credit and MIT license are preserved.
+
+The following devices are supported:
 
 - **Universal remotes**: RM home, RM mini 3, RM plus, RM pro, RM pro+, RM4 mini, RM4 pro, RM4C mini, RM4S, RM4 TV mate
 - **Smart plugs**: SP mini, SP mini 3, SP mini+, SP1, SP2, SP2-BR, SP2-CL, SP2-IN, SP2-UK, SP3, SP3-EU, SP3S-EU, SP3S-US, SP4L-AU, SP4L-EU, SP4L-UK, SP4M, SP4M-US, Ankuoo NEO, Ankuoo NEO PRO, Efergy Ego, BG AHC/U-01
@@ -19,8 +33,12 @@ A Python module and CLI for controlling Broadlink devices locally. The following
 Use pip3 to install the latest version of this module.
 
 ```
-pip3 install broadlink
+pip3 install python-broadlink
 ```
+
+If the original `broadlink` distribution is also installed in the same
+environment, remove it first (`pip3 uninstall broadlink`); both provide the
+`broadlink` package.
 
 ## Basic functions
 

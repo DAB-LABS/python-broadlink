@@ -4,9 +4,9 @@ import socket
 from typing import Generator, List, Optional, Tuple, Union
 
 from . import exceptions as e
-from .const import DEFAULT_BCAST_ADDR, DEFAULT_PORT, DEFAULT_TIMEOUT
 from .alarm import S1C
 from .climate import hvac, hysen
+from .const import DEFAULT_BCAST_ADDR, DEFAULT_PORT, DEFAULT_TIMEOUT
 from .cover import dooya, dooya2, wser
 from .device import Device, ping, scan
 from .hub import s3

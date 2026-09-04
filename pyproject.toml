@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "python-broadlink"
+version = "1.0.0.dev0"
+description = "Python API for controlling Broadlink devices"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.13"
+authors = [
+    { name = "Matthew Garrett", email = "mjg59@srcf.ucam.org" },
+    { name = "DAB-LABS" },
+]
+maintainers = [
+    { name = "DAB-LABS" },
+]
+keywords = ["broadlink", "infrared", "rf", "home-assistant", "rm4", "rm-pro"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Home Automation",
+]
+dependencies = [
+    "cryptography>=3.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "ruff>=0.5",
+    "build",
+]
+
+[project.urls]
+Homepage = "https://github.com/DAB-LABS/python-broadlink"
+Repository = "https://github.com/DAB-LABS/python-broadlink"
+Issues = "https://github.com/DAB-LABS/python-broadlink/issues"
+Changelog = "https://github.com/DAB-LABS/python-broadlink/blob/master/CHANGELOG.md"
+Upstream = "https://github.com/mjg59/python-broadlink"
+
+[tool.setuptools]
+packages = ["broadlink"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 90
+target-version = "py313"
+
+[tool.ruff.lint]
+# Start from the upstream flake8 gate (syntax errors and undefined names)
+# plus pyflakes and import hygiene. Style rules widen once the async port lands.
+select = ["E9", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+# The package __init__ re-exports the public API.
+"broadlink/__init__.py" = ["F401"]

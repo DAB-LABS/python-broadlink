@@ -1,1 +1,12 @@
 *.pyc
+__pycache__/
+*.egg-info/
+build/
+dist/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+
+# Working notes that are not part of the published project.
+docs/internal/
