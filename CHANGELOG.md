@@ -39,8 +39,35 @@ history below starts at that fork point.
   3.14, and builds the sdist and wheel on every pull request. Releases are
   published to PyPI from version tags using trusted publishing.
 
+### Fixed
+
+- The IR tick constant used by `pulses_to_data` and `data_to_pulses` is now
+  `TICK = 8192 / 269` (about 30.45 us), matching the device's 32768 Hz
+  timebase as documented in `protocol.md`. The previous value, 32.84, was
+  the inverse ratio applied the wrong way round and compressed IR codes
+  built from true microsecond timings by about 7 percent. Codes learned and
+  replayed through the same device were unaffected. Verified on an RM4 Pro
+  against an independent receiver in both directions.
+  (mjg59/python-broadlink#839, #841)
+- `pulses_to_data` rounds each duration to the nearest tick instead of
+  truncating, which removes up to one tick of systematic shortening per
+  pulse.
+
 ### Added
 
+- Devices, carried over from pull requests against the original repository
+  with their authors' commits intact: RM Max 0xAF8B (#838, Alexey Masolov);
+  RM5 plus 0x5224 with a new `rm5plus` class (#831, Anil Daoud); RM mini 3
+  OEM 0xA544 (#823, Bartłomiej Nogaś); RM mini 3 CMCC 0x27C8 (#802,
+  shuxin); LB26 R1 0xA517 (#812, techitapart); SP mini 3-AL 0x7D15 (#805,
+  bbcbbk); LEDVANCE SMART+ WIFI CEILING TW 24W 0x6498 (#799, Felipe Martins
+  Diel).
+- Devices reported in issues against the original repository, added by
+  model name to the existing class for that family and not yet confirmed on
+  hardware: MP1-1K3S2U 0x4EDA (#816) and SP4 0xA57A (#758). Please open an
+  issue if either does not behave.
+- `cryptography` 43 or newer is required, the first release with wheels for
+  Python 3.13 (supersedes mjg59/python-broadlink#749).
 - A test suite. The `tests/oracle` package records the exact request bytes
   every public method of every device class sends, and the results it
   decodes from canned responses, so that later changes to the transport

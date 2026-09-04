@@ -8,36 +8,52 @@ import pytest
 
 from broadlink.helpers import CRC16
 from broadlink.protocol import Datetime
-from broadlink.remote import data_to_pulses, pulses_to_data
+from broadlink.remote import TICK, data_to_pulses, pulses_to_data
 
-# NOTE: these pin the 0.19.0 behavior of the pulse helpers, including the
-# 32.84 tick that upstream issue #839 identifies as wrong. They are expected
-# to change, deliberately and in the same pull request, when the tick fix
-# lands; until then they document what shipped.
+
+def test_tick_constant():
+    # 32768 Hz timebase: protocol.md's "us * 269 / 8192".
+    assert TICK == pytest.approx(8192 / 269)
+    assert TICK == pytest.approx(30.4535, abs=1e-4)
 
 
 def test_pulses_to_data_header_and_short_pulses():
-    data = pulses_to_data([328, 656], tick=32.84)
+    data = pulses_to_data([328, 656])
     assert data[0] == 0x26
     assert data[1] == 0x00
     assert int.from_bytes(data[2:4], "little") == 2
-    assert data[4:] == bytes([9, 19])  # floor(328/32.84)=9, floor(656/32.84)=19
+    # round(328/30.4535)=11, round(656/30.4535)=22
+    assert data[4:] == bytes([11, 22])
+
+
+def test_pulses_to_data_rounds_to_nearest_tick():
+    # 0.6 of a tick rounds up; 0.4 rounds down. The old code floored both.
+    assert pulses_to_data([TICK * 10.6])[4] == 11
+    assert pulses_to_data([TICK * 10.4])[4] == 10
 
 
 def test_pulses_to_data_long_pulse_uses_three_byte_form():
-    data = pulses_to_data([10000], tick=32.84)
-    ticks = int(10000 // 32.84)  # 304
+    data = pulses_to_data([10000])
+    ticks = round(10000 / TICK)  # 328
+    assert ticks > 255
     assert data[4:] == bytes([0, ticks >> 8, ticks & 0xFF])
     assert int.from_bytes(data[2:4], "little") == 3
+
+
+def test_explicit_tick_argument_still_honored():
+    # Callers may still pass their own tick.
+    assert pulses_to_data([328, 656], tick=32.84)[4:] == bytes([10, 20])
+    assert data_to_pulses(bytes([0x26, 0, 1, 0, 10]), tick=32.84) == [328]
 
 
 def test_data_to_pulses_round_trip_at_same_tick():
     pulses = [9000, 4500, 560, 560, 560, 1690, 40000]
     data = pulses_to_data(pulses)
     back = data_to_pulses(data)
-    # Both directions use the same tick, so the round trip lands within a tick.
+    # Rounding on the way in (and int() on the way out) keeps the round
+    # trip within half a tick plus one microsecond.
     for a, b in zip(pulses, back, strict=True):
-        assert abs(a - b) <= 33
+        assert abs(a - b) <= TICK / 2 + 1
 
 
 def test_data_to_pulses_honors_declared_length():

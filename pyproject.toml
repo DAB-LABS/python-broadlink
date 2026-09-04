@@ -28,7 +28,7 @@ classifiers = [
     "Topic :: Home Automation",
 ]
 dependencies = [
-    "cryptography>=3.2",
+    "cryptography>=43",
 ]
 
 [project.optional-dependencies]

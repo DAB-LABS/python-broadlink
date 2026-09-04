@@ -63,6 +63,7 @@ SUPPORTED_TYPES = {
         0x7583: ("SP mini 3", "Broadlink"),
         0x7587: ("SP4L-UK", "Broadlink"),
         0x7D11: ("SP mini 3", "Broadlink"),
+        0x7D15: ("SP mini 3-AL", "Broadlink (OEM)"),
         0xA4F9: ("WS4", "Broadlink (OEM)"),
         0xA569: ("SP4L-UK", "Broadlink"),
         0xA56A: ("MCB1", "Broadlink"),
@@ -71,8 +72,8 @@ SUPPORTED_TYPES = {
         0xA576: ("SP4L-AU", "Broadlink"),
         0xA589: ("SP4L-UK", "Broadlink"),
         0xA5D3: ("SP4L-EU", "Broadlink"),
+        0xA57A: ("SP4", "Broadlink"),
         0xA6F4: ("SP4D-US", "Broadlink"),
-        0x7d15: ("SP mini 3-AL", "Broadlink (OEM)"),
     },
     sp4b: {
         0x5115: ("SCB1E", "Broadlink"),
@@ -91,7 +92,7 @@ SUPPORTED_TYPES = {
         0x27B7: ("RM mini 3", "Broadlink"),
         0x27C2: ("RM mini 3", "Broadlink"),
         0x27C7: ("RM mini 3", "Broadlink"),
-        0x27C8: ("RM mini 3", "Broadlink"), #cmcc version
+        0x27C8: ("RM mini 3", "Broadlink"),  # CMCC version
         0x27CC: ("RM mini 3", "Broadlink"),
         0x27CD: ("RM mini 3", "Broadlink"),
         0x27D0: ("RM mini 3", "Broadlink"),
@@ -162,6 +163,7 @@ SUPPORTED_TYPES = {
     },
     mp1: {
         0x4EB5: ("MP1-1K4S", "Broadlink"),
+        0x4EDA: ("MP1-1K3S2U", "Broadlink"),
         0x4F1B: ("MP1-1K3S2U", "Broadlink (OEM)"),
         0x4F65: ("MP1-1K3S2U", "Broadlink"),
     },
