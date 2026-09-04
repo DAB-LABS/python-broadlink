@@ -12,11 +12,11 @@ class sp1(Device):
 
     TYPE = "SP1"
 
-    def set_power(self, pwr: bool) -> None:
+    async def set_power(self, pwr: bool) -> None:
         """Set the power state of the device."""
         packet = bytearray(4)
         packet[0] = bool(pwr)
-        response = self.send_packet(0x66, packet)
+        response = await self.send_packet(0x66, packet)
         e.check_error(response[0x22:0x24])
 
 
@@ -25,19 +25,19 @@ class sp2(Device):
 
     TYPE = "SP2"
 
-    def set_power(self, pwr: bool) -> None:
+    async def set_power(self, pwr: bool) -> None:
         """Set the power state of the device."""
         packet = bytearray(16)
         packet[0] = 2
         packet[4] = bool(pwr)
-        response = self.send_packet(0x6A, packet)
+        response = await self.send_packet(0x6A, packet)
         e.check_error(response[0x22:0x24])
 
-    def check_power(self) -> bool:
+    async def check_power(self) -> bool:
         """Return the power state of the device."""
         packet = bytearray(16)
         packet[0] = 1
-        response = self.send_packet(0x6A, packet)
+        response = await self.send_packet(0x6A, packet)
         e.check_error(response[0x22:0x24])
         payload = self.decrypt(response[0x38:])
         return bool(payload[0x4])
@@ -48,11 +48,11 @@ class sp2s(sp2):
 
     TYPE = "SP2S"
 
-    def get_energy(self) -> float:
+    async def get_energy(self) -> float:
         """Return the power consumption in W."""
         packet = bytearray(16)
         packet[0] = 4
-        response = self.send_packet(0x6A, packet)
+        response = await self.send_packet(0x6A, packet)
         e.check_error(response[0x22:0x24])
         payload = self.decrypt(response[0x38:])
         return int.from_bytes(payload[0x4:0x7], "little") / 1000
@@ -63,36 +63,36 @@ class sp3(Device):
 
     TYPE = "SP3"
 
-    def set_power(self, pwr: bool) -> None:
+    async def set_power(self, pwr: bool) -> None:
         """Set the power state of the device."""
         packet = bytearray(16)
         packet[0] = 2
-        packet[4] = self.check_nightlight() << 1 | bool(pwr)
-        response = self.send_packet(0x6A, packet)
+        packet[4] = await self.check_nightlight() << 1 | bool(pwr)
+        response = await self.send_packet(0x6A, packet)
         e.check_error(response[0x22:0x24])
 
-    def set_nightlight(self, ntlight: bool) -> None:
+    async def set_nightlight(self, ntlight: bool) -> None:
         """Set the night light state of the device."""
         packet = bytearray(16)
         packet[0] = 2
-        packet[4] = bool(ntlight) << 1 | self.check_power()
-        response = self.send_packet(0x6A, packet)
+        packet[4] = bool(ntlight) << 1 | await self.check_power()
+        response = await self.send_packet(0x6A, packet)
         e.check_error(response[0x22:0x24])
 
-    def check_power(self) -> bool:
+    async def check_power(self) -> bool:
         """Return the power state of the device."""
         packet = bytearray(16)
         packet[0] = 1
-        response = self.send_packet(0x6A, packet)
+        response = await self.send_packet(0x6A, packet)
         e.check_error(response[0x22:0x24])
         payload = self.decrypt(response[0x38:])
         return bool(payload[0x4] & 1)
 
-    def check_nightlight(self) -> bool:
+    async def check_nightlight(self) -> bool:
         """Return the state of the night light."""
         packet = bytearray(16)
         packet[0] = 1
-        response = self.send_packet(0x6A, packet)
+        response = await self.send_packet(0x6A, packet)
         e.check_error(response[0x22:0x24])
         payload = self.decrypt(response[0x38:])
         return bool(payload[0x4] & 2)
@@ -103,10 +103,10 @@ class sp3s(sp2):
 
     TYPE = "SP3S"
 
-    def get_energy(self) -> float:
+    async def get_energy(self) -> float:
         """Return the power consumption in W."""
         packet = bytearray([8, 0, 254, 1, 5, 1, 0, 0, 0, 45])
-        response = self.send_packet(0x6A, packet)
+        response = await self.send_packet(0x6A, packet)
         e.check_error(response[0x22:0x24])
         payload = self.decrypt(response[0x38:])
         energy = payload[0x7:0x4:-1].hex()
@@ -118,15 +118,15 @@ class sp4(Device):
 
     TYPE = "SP4"
 
-    def set_power(self, pwr: bool) -> None:
+    async def set_power(self, pwr: bool) -> None:
         """Set the power state of the device."""
-        self.set_state(pwr=pwr)
+        await self.set_state(pwr=pwr)
 
-    def set_nightlight(self, ntlight: bool) -> None:
+    async def set_nightlight(self, ntlight: bool) -> None:
         """Set the night light state of the device."""
-        self.set_state(ntlight=ntlight)
+        await self.set_state(ntlight=ntlight)
 
-    def set_state(
+    async def set_state(
         self,
         pwr: Optional[bool] = None,
         ntlight: Optional[bool] = None,
@@ -151,23 +151,23 @@ class sp4(Device):
             state["childlock"] = int(bool(childlock))
 
         packet = self._encode(2, state)
-        response = self.send_packet(0x6A, packet)
+        response = await self.send_packet(0x6A, packet)
         return self._decode(response)
 
-    def check_power(self) -> bool:
+    async def check_power(self) -> bool:
         """Return the power state of the device."""
-        state = self.get_state()
+        state = await self.get_state()
         return bool(state["pwr"])
 
-    def check_nightlight(self) -> bool:
+    async def check_nightlight(self) -> bool:
         """Return the state of the night light."""
-        state = self.get_state()
+        state = await self.get_state()
         return bool(state["ntlight"])
 
-    def get_state(self) -> dict:
+    async def get_state(self) -> dict:
         """Get full state of device."""
         packet = self._encode(1, {})
-        response = self.send_packet(0x6A, packet)
+        response = await self.send_packet(0x6A, packet)
         return self._decode(response)
 
     def _encode(self, flag: int, state: dict) -> bytes:
@@ -196,9 +196,9 @@ class sp4b(sp4):
 
     TYPE = "SP4B"
 
-    def get_state(self) -> dict:
+    async def get_state(self) -> dict:
         """Get full state of device."""
-        state = super().get_state()
+        state = await super().get_state()
 
         # Convert sensor data to float. Remove keys if sensors are not supported.
         sensor_attrs = ["current", "volt", "power", "totalconsum", "overload"]
@@ -244,17 +244,17 @@ class bg1(Device):
 
     TYPE = "BG1"
 
-    def get_state(self) -> dict:
+    async def get_state(self) -> dict:
         """Return the power state of the device.
 
         Example: `{"pwr":1,"pwr1":1,"pwr2":0,"maxworktime":60,"maxworktime1":60,"maxworktime2":0,"idcbrightness":50}`
         """
         packet = self._encode(1, {})
-        response = self.send_packet(0x6A, packet)
+        response = await self.send_packet(0x6A, packet)
         e.check_error(response[0x22:0x24])
         return self._decode(response)
 
-    def set_state(
+    async def set_state(
         self,
         pwr: Optional[bool] = None,
         pwr1: Optional[bool] = None,
@@ -282,7 +282,7 @@ class bg1(Device):
             state["idcbrightness"] = idcbrightness
 
         packet = self._encode(2, state)
-        response = self.send_packet(0x6A, packet)
+        response = await self.send_packet(0x6A, packet)
         e.check_error(response[0x22:0x24])
         return self._decode(response)
 
@@ -321,7 +321,7 @@ class ehc31(bg1):
 
     TYPE = "EHC31"
 
-    def set_state(
+    async def set_state(
         self,
         pwr: Optional[bool] = None,
         pwr1: Optional[bool] = None,
@@ -367,7 +367,7 @@ class ehc31(bg1):
             state["childlock4"] = int(bool(childlock4))
 
         packet = self._encode(2, state)
-        response = self.send_packet(0x6A, packet)
+        response = await self.send_packet(0x6A, packet)
         e.check_error(response[0x22:0x24])
         return self._decode(response)
 
@@ -377,7 +377,7 @@ class mp1(Device):
 
     TYPE = "MP1"
 
-    def set_power_mask(self, sid_mask: int, pwr: bool) -> None:
+    async def set_power_mask(self, sid_mask: int, pwr: bool) -> None:
         """Set the power state of the device."""
         packet = bytearray(16)
         packet[0x00] = 0x0D
@@ -392,15 +392,15 @@ class mp1(Device):
         packet[0x0D] = sid_mask
         packet[0x0E] = sid_mask if pwr else 0
 
-        response = self.send_packet(0x6A, packet)
+        response = await self.send_packet(0x6A, packet)
         e.check_error(response[0x22:0x24])
 
-    def set_power(self, sid: int, pwr: bool) -> None:
+    async def set_power(self, sid: int, pwr: bool) -> None:
         """Set the power state of the device."""
         sid_mask = 0x01 << (sid - 1)
-        self.set_power_mask(sid_mask, pwr)
+        await self.set_power_mask(sid_mask, pwr)
 
-    def check_power_raw(self) -> int:
+    async def check_power_raw(self) -> int:
         """Return the power state of the device in raw format."""
         packet = bytearray(16)
         packet[0x00] = 0x0A
@@ -412,14 +412,14 @@ class mp1(Device):
         packet[0x07] = 0xC0
         packet[0x08] = 0x01
 
-        response = self.send_packet(0x6A, packet)
+        response = await self.send_packet(0x6A, packet)
         e.check_error(response[0x22:0x24])
         payload = self.decrypt(response[0x38:])
         return payload[0x0E]
 
-    def check_power(self) -> dict:
+    async def check_power(self) -> dict:
         """Return the power state of the device."""
-        data = self.check_power_raw()
+        data = await self.check_power_raw()
         return {
             "s1": bool(data & 1),
             "s2": bool(data & 2),
@@ -433,7 +433,7 @@ class mp1s(mp1):
 
     TYPE = "MP1S"
 
-    def get_state(self) -> dict:
+    async def get_state(self) -> dict:
         """Return the power state of the device.
 
         voltage in V.
@@ -452,7 +452,7 @@ class mp1s(mp1):
         packet[0x08] = 0x01
         packet[0x0A] = 0x04
 
-        response = self.send_packet(0x6A, packet)
+        response = await self.send_packet(0x6A, packet)
         e.check_error(response[0x22:0x24])
         payload = self.decrypt(response[0x38:])
         payload_str = payload.hex()[4:-6]

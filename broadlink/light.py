@@ -21,17 +21,17 @@ class lb1(Device):
         WHITE = 1
         SCENE = 2
 
-    def get_state(self) -> dict:
+    async def get_state(self) -> dict:
         """Return the power state of the device.
 
         Example: `{'red': 128, 'blue': 255, 'green': 128, 'pwr': 1, 'brightness': 75, 'colortemp': 2700, 'hue': 240, 'saturation': 50, 'transitionduration': 1500, 'maxworktime': 0, 'bulb_colormode': 1, 'bulb_scenes': '["@01686464,0,0,0", "#ffffff,10,0,#000000,190,0,0", "2700+100,0,0,0", "#ff0000,500,2500,#00FF00,500,2500,#0000FF,500,2500,0", "@01686464,100,2400,@01686401,100,2400,0", "@01686464,100,2400,@01686401,100,2400,@005a6464,100,2400,@005a6401,100,2400,0", "@01686464,10,0,@00000000,190,0,0", "@01686464,200,0,@005a6464,200,0,0"]', 'bulb_scene': '', 'bulb_sceneidx': 255}`
         """
         packet = self._encode(1, {})
-        response = self.send_packet(0x6A, packet)
+        response = await self.send_packet(0x6A, packet)
         e.check_error(response[0x22:0x24])
         return self._decode(response)
 
-    def set_state(
+    async def set_state(
         self,
         pwr: Optional[bool] = None,
         red: Optional[int] = None,
@@ -80,7 +80,7 @@ class lb1(Device):
             state["bulb_sceneidx"] = int(bulb_sceneidx)
 
         packet = self._encode(2, state)
-        response = self.send_packet(0x6A, packet)
+        response = await self.send_packet(0x6A, packet)
         e.check_error(response[0x22:0x24])
         return self._decode(response)
 
@@ -119,17 +119,17 @@ class lb2(Device):
         WHITE = 1
         SCENE = 2
 
-    def get_state(self) -> dict:
+    async def get_state(self) -> dict:
         """Return the power state of the device.
 
         Example: `{'red': 128, 'blue': 255, 'green': 128, 'pwr': 1, 'brightness': 75, 'colortemp': 2700, 'hue': 240, 'saturation': 50, 'transitionduration': 1500, 'maxworktime': 0, 'bulb_colormode': 1, 'bulb_scenes': '["@01686464,0,0,0", "#ffffff,10,0,#000000,190,0,0", "2700+100,0,0,0", "#ff0000,500,2500,#00FF00,500,2500,#0000FF,500,2500,0", "@01686464,100,2400,@01686401,100,2400,0", "@01686464,100,2400,@01686401,100,2400,@005a6464,100,2400,@005a6401,100,2400,0", "@01686464,10,0,@00000000,190,0,0", "@01686464,200,0,@005a6464,200,0,0"]', 'bulb_scene': ''}`
         """
         packet = self._encode(1, {})
-        response = self.send_packet(0x6A, packet)
+        response = await self.send_packet(0x6A, packet)
         e.check_error(response[0x22:0x24])
         return self._decode(response)
 
-    def set_state(
+    async def set_state(
         self,
         pwr: Optional[bool] = None,
         red: Optional[int] = None,
@@ -175,7 +175,7 @@ class lb2(Device):
             state["bulb_scene"] = str(bulb_scene)
 
         packet = self._encode(2, state)
-        response = self.send_packet(0x6A, packet)
+        response = await self.send_packet(0x6A, packet)
         e.check_error(response[0x22:0x24])
         return self._decode(response)
 

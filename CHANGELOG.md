@@ -11,6 +11,26 @@ history below starts at that fork point.
 
 ### Changed
 
+- **The library is asynchronous.** Every method that talks to a device is
+  now a coroutine: `await device.auth()`, `await device.send_data(...)`,
+  `await device.check_sensors()`, and so on. Discovery is
+  `await broadlink.discover(...)`, `broadlink.hello(...)` and `setup(...)`
+  are coroutines, and `xdiscover(...)` is an async generator. The packet
+  helpers (`pulses_to_data`, `data_to_pulses`), CRC and datetime helpers
+  stay synchronous. There is no synchronous compatibility layer: a call
+  without `await` returns a coroutine and does nothing.
+- Each device keeps one UDP endpoint for its lifetime (the previous
+  version opened a socket per call) and serializes requests on it with an
+  `asyncio.Lock`. The old code declared a lock but never acquired it.
+  `async with device:` or `await device.aclose()` releases the endpoint;
+  it reopens on the next call.
+- When a device reports that the session key has expired, the library
+  re-authenticates once and repeats the request. Callers no longer need
+  their own re-auth loop.
+- Retry and timeout behaviour is unchanged: a request is repeated every
+  second until `timeout` elapses, then `NetworkTimeoutError` is raised.
+- `dooya.set_percentage_and_wait` sleeps with `asyncio.sleep`.
+- The CLI tools run their body under `asyncio.run`.
 - Packaging moved to `pyproject.toml`; `setup.py` and the stale
   `requirements.txt` pin are gone. The distribution name is now
   `python-broadlink`; the import name stays `broadlink`. Python 3.13 or

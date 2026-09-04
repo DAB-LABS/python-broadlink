@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import asyncio
 import base64
 import time
 from typing import List
@@ -57,165 +58,173 @@ parser.add_argument("--joinwifi", nargs=2, help="Args are SSID PASSPHRASE to con
 parser.add_argument("data", nargs='*', help="Data to send or convert")
 args = parser.parse_args()
 
-if args.device:
-    values = args.device.split()
-    devtype = int(values[0], 0)
-    host = values[1]
-    mac = bytearray.fromhex(values[2])
-elif args.mac:
-    devtype = args.type
-    host = args.host
-    mac = bytearray.fromhex(args.mac)
 
-if args.host or args.device:
-    dev = broadlink.gendevice(devtype, (host, DEFAULT_PORT), mac)
-    dev.auth()
+async def main():
+    dev = None
 
-if args.joinwifi:
-    broadlink.setup(args.joinwifi[0], args.joinwifi[1], 4)
+    if args.device:
+        values = args.device.split()
+        devtype = int(values[0], 0)
+        host = values[1]
+        mac = bytearray.fromhex(values[2])
+    elif args.mac:
+        devtype = args.type
+        host = args.host
+        mac = bytearray.fromhex(args.mac)
 
-if args.convert:
-    data = bytearray.fromhex(''.join(args.data))
-    pulses = data_to_pulses(data)
-    print(format_pulses(pulses))
-if args.temperature:
-    print(dev.check_temperature())
-if args.humidity:
-    print(dev.check_humidity())
-if args.energy:
-    print(dev.get_energy())
-if args.sensors:
-    data = dev.check_sensors()
-    for key in data:
-        print("{} {}".format(key, data[key]))
-if args.send:
-    data = (
-        pulses_to_data(parse_pulses(args.data))
-        if args.durations
-        else bytes.fromhex(''.join(args.data))
-    )
-    dev.send_data(data)
-if args.learn or (args.learnfile and not args.rflearn):
-    dev.enter_learning()
-    print("Learning...")
-    start = time.time()
-    while time.time() - start < TIMEOUT:
-        time.sleep(1)
-        try:
-            data = dev.check_data()
-        except (ReadError, StorageError):
-            continue
+    if args.host or args.device:
+        dev = broadlink.gendevice(devtype, (host, DEFAULT_PORT), mac)
+        await dev.auth()
+
+    if args.joinwifi:
+        await broadlink.setup(args.joinwifi[0], args.joinwifi[1], 4)
+
+    if args.convert:
+        data = bytearray.fromhex(''.join(args.data))
+        pulses = data_to_pulses(data)
+        print(format_pulses(pulses))
+    if args.temperature:
+        print(await dev.check_temperature())
+    if args.humidity:
+        print(await dev.check_humidity())
+    if args.energy:
+        print(await dev.get_energy())
+    if args.sensors:
+        data = await dev.check_sensors()
+        for key in data:
+            print("{} {}".format(key, data[key]))
+    if args.send:
+        data = (
+            pulses_to_data(parse_pulses(args.data))
+            if args.durations
+            else bytes.fromhex(''.join(args.data))
+        )
+        await dev.send_data(data)
+    if args.learn or (args.learnfile and not args.rflearn):
+        await dev.enter_learning()
+        print("Learning...")
+        start = time.time()
+        while time.time() - start < TIMEOUT:
+            await asyncio.sleep(1)
+            try:
+                data = await dev.check_data()
+            except (ReadError, StorageError):
+                continue
+            else:
+                break
         else:
-            break
-    else:
-        print("No data received...")
-        exit(1)
+            print("No data received...")
+            exit(1)
 
-    print("Packet found!")
-    raw_fmt = data.hex()
-    base64_fmt = base64.b64encode(data).decode('ascii')
-    pulse_fmt = format_pulses(data_to_pulses(data))
+        print("Packet found!")
+        raw_fmt = data.hex()
+        base64_fmt = base64.b64encode(data).decode('ascii')
+        pulse_fmt = format_pulses(data_to_pulses(data))
 
-    print("Raw:", raw_fmt)
-    print("Base64:", base64_fmt)
-    print("Pulses:", pulse_fmt)
+        print("Raw:", raw_fmt)
+        print("Base64:", base64_fmt)
+        print("Pulses:", pulse_fmt)
 
-    if args.learnfile:
-        print("Saving to {}".format(args.learnfile))
-        with open(args.learnfile, "w") as text_file:
-            text_file.write(pulse_fmt if args.durations else raw_fmt)
-if args.check:
-    if dev.check_power():
-        print('* ON *')
-    else:
-        print('* OFF *')
-if args.checknl:
-    if dev.check_nightlight():
-        print('* ON *')
-    else:
-        print('* OFF *')
-if args.turnon:
-    dev.set_power(True)
-    if dev.check_power():
-        print('== Turned * ON * ==')
-    else:
-        print('!! Still OFF !!')
-if args.turnoff:
-    dev.set_power(False)
-    if dev.check_power():
-        print('!! Still ON !!')
-    else:
-        print('== Turned * OFF * ==')
-if args.turnnlon:
-    dev.set_nightlight(True)
-    if dev.check_nightlight():
-        print('== Turned * ON * ==')
-    else:
-        print('!! Still OFF !!')
-if args.turnnloff:
-    dev.set_nightlight(False)
-    if dev.check_nightlight():
-        print('!! Still ON !!')
-    else:
-        print('== Turned * OFF * ==')
-if args.switch:
-    if dev.check_power():
-        dev.set_power(False)
-        print('* Switch to OFF *')
-    else:
-        dev.set_power(True)
-        print('* Switch to ON *')
-if args.rflearn:
-    if args.frequency:
-        frequency = args.frequency
-        print("Press the button you want to learn, a short press...")
-    else:
-        dev.sweep_frequency()
-        print("Detecting radiofrequency, press and hold the button to learn...")
+        if args.learnfile:
+            print("Saving to {}".format(args.learnfile))
+            with open(args.learnfile, "w") as text_file:
+                text_file.write(pulse_fmt if args.durations else raw_fmt)
+    if args.check:
+        if await dev.check_power():
+            print('* ON *')
+        else:
+            print('* OFF *')
+    if args.checknl:
+        if await dev.check_nightlight():
+            print('* ON *')
+        else:
+            print('* OFF *')
+    if args.turnon:
+        await dev.set_power(True)
+        if await dev.check_power():
+            print('== Turned * ON * ==')
+        else:
+            print('!! Still OFF !!')
+    if args.turnoff:
+        await dev.set_power(False)
+        if await dev.check_power():
+            print('!! Still ON !!')
+        else:
+            print('== Turned * OFF * ==')
+    if args.turnnlon:
+        await dev.set_nightlight(True)
+        if await dev.check_nightlight():
+            print('== Turned * ON * ==')
+        else:
+            print('!! Still OFF !!')
+    if args.turnnloff:
+        await dev.set_nightlight(False)
+        if await dev.check_nightlight():
+            print('!! Still ON !!')
+        else:
+            print('== Turned * OFF * ==')
+    if args.switch:
+        if await dev.check_power():
+            await dev.set_power(False)
+            print('* Switch to OFF *')
+        else:
+            await dev.set_power(True)
+            print('* Switch to ON *')
+    if args.rflearn:
+        if args.frequency:
+            frequency = args.frequency
+            print("Press the button you want to learn, a short press...")
+        else:
+            await dev.sweep_frequency()
+            print("Detecting radiofrequency, press and hold the button to learn...")
+
+            start = time.time()
+            while time.time() - start < TIMEOUT:
+                await asyncio.sleep(1)
+                locked, frequency = await dev.check_frequency()
+                if locked:
+                    break
+            else:
+                print("Radiofrequency not found")
+                await dev.cancel_sweep_frequency()
+                exit(1)
+
+            print("Radiofrequency detected: {}MHz".format(frequency))
+            print("You can now let go of the button")
+
+            input("Press enter to continue...")
+
+            print("Press the button again, now a short press.")
+
+        await dev.find_rf_packet(frequency)
 
         start = time.time()
         while time.time() - start < TIMEOUT:
-            time.sleep(1)
-            locked, frequency = dev.check_frequency()
-            if locked:
+            await asyncio.sleep(1)
+            try:
+                data = await dev.check_data()
+            except (ReadError, StorageError):
+                continue
+            else:
                 break
         else:
-            print("Radiofrequency not found")
-            dev.cancel_sweep_frequency()
+            print("No data received...")
             exit(1)
 
-        print("Radiofrequency detected: {}MHz".format(frequency))
-        print("You can now let go of the button")
+        print("Packet found!")
+        raw_fmt = data.hex()
+        base64_fmt = base64.b64encode(data).decode('ascii')
+        pulse_fmt = format_pulses(data_to_pulses(data))
 
-        input("Press enter to continue...")
+        print("Raw:", raw_fmt)
+        print("Base64:", base64_fmt)
+        print("Pulses:", pulse_fmt)
 
-        print("Press the button again, now a short press.")
+        if args.learnfile:
+            print("Saving to {}".format(args.learnfile))
+            with open(args.learnfile, "w") as text_file:
+                text_file.write(pulse_fmt if args.durations else raw_fmt)
 
-    dev.find_rf_packet(frequency)
 
-    start = time.time()
-    while time.time() - start < TIMEOUT:
-        time.sleep(1)
-        try:
-            data = dev.check_data()
-        except (ReadError, StorageError):
-            continue
-        else:
-            break
-    else:
-        print("No data received...")
-        exit(1)
-
-    print("Packet found!")
-    raw_fmt = data.hex()
-    base64_fmt = base64.b64encode(data).decode('ascii')
-    pulse_fmt = format_pulses(data_to_pulses(data))
-
-    print("Raw:", raw_fmt)
-    print("Base64:", base64_fmt)
-    print("Pulses:", pulse_fmt)
-
-    if args.learnfile:
-        print("Saving to {}".format(args.learnfile))
-        with open(args.learnfile, "w") as text_file:
-            text_file.write(pulse_fmt if args.durations else raw_fmt)
+if __name__ == "__main__":
+    asyncio.run(main())

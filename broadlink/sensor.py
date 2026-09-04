@@ -16,9 +16,9 @@ class a1(Device):
         ("noise", ("quiet", "normal", "noisy")),
     )
 
-    def check_sensors(self) -> dict:
+    async def check_sensors(self) -> dict:
         """Return the state of the sensors."""
-        data = self.check_sensors_raw()
+        data = await self.check_sensors_raw()
         for sensor, levels in self._SENSORS_AND_LEVELS:
             try:
                 data[sensor] = levels[data[sensor]]
@@ -26,10 +26,10 @@ class a1(Device):
                 data[sensor] = "unknown"
         return data
 
-    def check_sensors_raw(self) -> dict:
+    async def check_sensors_raw(self) -> dict:
         """Return the state of the sensors in raw format."""
         packet = bytearray([0x1])
-        resp = self.send_packet(0x6A, packet)
+        resp = await self.send_packet(0x6A, packet)
         e.check_error(resp[0x22:0x24])
         data = self.decrypt(resp[0x38:])
 
@@ -47,7 +47,7 @@ class a2(Device):
 
     TYPE = "A2"
 
-    def _send(self, operation: int, data: Sequence = b""):
+    async def _send(self, operation: int, data: Sequence = b""):
         """Send a command to the device."""
         packet = bytearray(12)
         packet[0x02] = 0xA5
@@ -72,14 +72,14 @@ class a2(Device):
         packet[0x00] = packet_len & 0xFF
         packet[0x01] = packet_len >> 8
 
-        resp = self.send_packet(0x6A, packet)
+        resp = await self.send_packet(0x6A, packet)
         e.check_error(resp[0x22:0x24])
         payload = self.decrypt(resp[0x38:])
         return payload
 
-    def check_sensors_raw(self) -> dict:
+    async def check_sensors_raw(self) -> dict:
         """Return the state of the sensors in raw format."""
-        data = self._send(1)
+        data = await self._send(1)
 
         return {
             "temperature": data[0x13] * 256 + data[0x14],

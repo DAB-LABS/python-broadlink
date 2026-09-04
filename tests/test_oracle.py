@@ -36,7 +36,7 @@ def test_every_public_method_is_covered() -> None:
     # Methods on Device itself that need a live socket are covered in
     # test_transport.py, not here.
     transport_level = {"auth", "hello", "ping", "send_packet", "encrypt", "decrypt",
-                       "update_aes"}
+                       "update_aes", "aclose"}
     missing = []
     for name, cls in inspect.getmembers(broadlink, inspect.isclass):
         if not issubclass(cls, Device):
