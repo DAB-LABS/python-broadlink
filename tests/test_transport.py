@@ -223,6 +223,89 @@ def test_stale_reply_is_drained_before_a_request(net):
     assert run(go()) == 7
 
 
+def stamped(dev: Device, payload: bytes, count: int, error: int = 0) -> bytes:
+    """A response frame that echoes a packet counter, as real firmware does."""
+    frame = bytearray(make_response(dev, payload, error))
+    frame[0x28:0x2A] = count.to_bytes(2, "little")
+    checksum = sum(frame, 0xBEAF) - sum(frame[0x20:0x22]) & 0xFFFF
+    frame[0x20:0x22] = checksum.to_bytes(2, "little")
+    return bytes(frame)
+
+
+def test_late_reply_to_timed_out_request_is_not_taken_as_next_reply(net):
+    """The defect that 0.19.0 could not have because it threw its socket away
+    after every call: a slow answer to request 1 arriving after request 1
+    timed out must not be returned as the answer to request 2."""
+    dev = fixed_device()
+    dev.timeout = 0.02
+
+    async def go():
+        await dev._endpoint()
+        ep = net.endpoints[-1]
+        with pytest.raises(e.NetworkTimeoutError):
+            await dev.send_packet(0x6A, b"")  # request 1, count 0x8001, no answer
+        # Its late reply lands while request 2 (count 0x8002) is waiting.
+        late = stamped(dev, bytes([1]) + bytes(15), 0x8001)
+        good = stamped(dev, bytes([2]) + bytes(15), 0x8002)
+        ep.replies = [late, good] and []
+        ep.protocol.queue.put_nowait((late, HOST))
+
+        async def answer_later():
+            await asyncio.sleep(0.005)
+            ep.protocol.queue.put_nowait((good, HOST))
+
+        asyncio.get_running_loop().create_task(answer_later())
+        dev.timeout = 1
+        resp = await dev.send_packet(0x6A, b"")
+        return dev.decrypt(resp[0x38:])[0]
+
+    assert run(go()) == 2
+
+
+def test_reply_with_unknown_counter_is_accepted(net):
+    """Firmware that does not echo the counter must keep working."""
+    dev = fixed_device()
+
+    async def go():
+        net.replies = [(stamped(dev, bytes([5]) + bytes(15), 0x0000), HOST)]
+        resp = await dev.send_packet(0x6A, b"")
+        return dev.decrypt(resp[0x38:])[0]
+
+    assert run(go()) == 5
+
+
+def test_aclose_fails_inflight_request_fast(net):
+    dev = fixed_device()
+    dev.timeout = 5
+    net.replies = []
+
+    async def go():
+        task = asyncio.get_running_loop().create_task(dev.send_packet(0x6A, b""))
+        await asyncio.sleep(0.01)
+        t0 = asyncio.get_running_loop().time()
+        await dev.aclose()
+        with pytest.raises(e.ConnectionClosedError):
+            await task
+        return asyncio.get_running_loop().time() - t0
+
+    assert run(go()) < 1.0
+
+
+def test_host_change_reopens_endpoint(net):
+    dev = fixed_device()
+
+    async def go():
+        net.replies = [(make_response(dev, b""), HOST)]
+        await dev.send_packet(0x6A, b"")
+        dev.host = ("192.0.2.99", 80)
+        net.replies = [(make_response(dev, b""), ("192.0.2.99", 80))]
+        await dev.send_packet(0x6A, b"")
+
+    run(go())
+    assert [ep.remote_addr for ep in net.endpoints] == [HOST, ("192.0.2.99", 80)]
+    assert net.endpoints[0].closed
+
+
 # ------------------------------------------------------------------------- auth
 
 
@@ -309,6 +392,67 @@ def test_reauth_is_not_attempted_twice(net):
 
     with pytest.raises(e.AuthorizationError):
         run(go())
+
+
+def test_concurrent_callers_share_one_reauth(net):
+    dev = fixed_device()
+    dev.id = 5
+    session_key = bytes.fromhex("00112233445566778899aabbccddeeff")
+    fresh = fixed_device()
+    auth_reply = make_response(fresh, (0x42).to_bytes(4, "little") + session_key)
+    renewed = fixed_device()
+    renewed.update_aes(session_key)
+    counters = {"value": 1}
+
+    async def go():
+        await dev._endpoint()
+        ep = net.endpoints[-1]
+        authed = {"done": False}
+
+        def sendto(data, addr=None):
+            ep.sent.append((bytes(data), addr or ep.remote_addr))
+            ptype = int.from_bytes(data[0x26:0x28], "little")
+            if ptype == 0x65:
+                authed["done"] = True
+                reply = auth_reply
+            elif not authed["done"]:
+                reply = make_response(dev, b"", error=0xFFF9)  # -7 expired
+            else:
+                n = counters["value"]
+                counters["value"] += 1
+                reply = make_response(renewed, bytes([n]) + bytes(15))
+            ep.protocol.queue.put_nowait((reply, ep.remote_addr))
+
+        ep.sendto = sendto
+        a, b = await asyncio.gather(dev.send_packet(0x6A, b"a"), dev.send_packet(0x6A, b"b"))
+        return ep, {dev.decrypt(a[0x38:])[0], dev.decrypt(b[0x38:])[0]}
+
+    ep, values = run(go())
+    types = [int.from_bytes(f[0x26:0x28], "little") for f, _ in ep.sent]
+    assert types.count(0x65) == 1  # exactly one auth despite two expired requests
+    assert values == {1, 2}
+
+
+def test_logged_out_code_triggers_reauth(net):
+    dev = fixed_device()
+    session_key = bytes.fromhex("00112233445566778899aabbccddeeff")
+    fresh = fixed_device()
+    auth_reply = make_response(fresh, (0x42).to_bytes(4, "little") + session_key)
+    renewed = fixed_device()
+    renewed.update_aes(session_key)
+
+    async def go():
+        await dev._endpoint()
+        ep = net.endpoints[-1]
+        ep.replies = [
+            (make_response(dev, b"", error=0xFFFE), HOST),  # -2 logged out
+            (auth_reply, HOST),
+            (make_response(renewed, bytes([3]) + bytes(15)), HOST),
+        ]
+        resp = await dev.send_packet(0x6A, b"")
+        return dev.decrypt(resp[0x38:])[0]
+
+    assert run(go()) == 3
 
 
 # ------------------------------------------------------------------- discovery

@@ -60,9 +60,16 @@ Use pip3 to install the latest version of this module.
 pip3 install python-broadlink
 ```
 
-If the original `broadlink` distribution is also installed in the same
-environment, remove it first (`pip3 uninstall broadlink`); both provide the
-`broadlink` package.
+Both this distribution and the original `broadlink` install a package named
+`broadlink`, so only one can be present in an environment at a time. Pip
+does not warn about this: installing one on top of the other appears to
+succeed, and whichever was installed last is the one that `import broadlink`
+finds. If both were installed, uninstall both (`pip3 uninstall broadlink
+python-broadlink`) and reinstall this one, since `pip3 uninstall broadlink`
+alone removes the shared files and leaves `python-broadlink` registered but
+unimportable. This matters most where another package pins `broadlink`:
+installing it into the same environment silently replaces this async
+library with the original synchronous one.
 
 ## Basic functions
 

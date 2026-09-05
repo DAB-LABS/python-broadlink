@@ -4,6 +4,7 @@ import asyncio
 import enum
 import struct
 import time
+import weakref
 from dataclasses import dataclass, field
 from typing import AsyncIterator, Awaitable, Callable, List, Optional, Tuple
 
@@ -214,7 +215,40 @@ class rmmini(Device):
         # against the value it saw when it armed the device and re-arms
         # after any send, since the device has one front end for both.
         self._tx_generation = 0
-        self._capture_open = False
+        # Weak reference to the async generator of the current capture
+        # window, if any. See _claim_window.
+        self._window: Optional[weakref.ReferenceType] = None
+
+    @property
+    def capture_active(self) -> bool:
+        """True while a capture window is open on this device."""
+        window = self._window() if self._window is not None else None
+        return window is not None and window.ag_frame is not None
+
+    def _check_window(self) -> Optional[weakref.ReferenceType]:
+        """Refuse a new window while another is being iterated; return the
+        reference to a previous window that the new one should close."""
+        old = self._window() if self._window is not None else None
+        if old is None or old.ag_frame is None:
+            return None
+        if old.ag_running:
+            raise e.CaptureInProgressError("A capture window is already open")
+        return self._window
+
+    async def _claim_window(self, prev: Optional[weakref.ReferenceType]) -> None:
+        """Close a previous window whose consumer walked away from it.
+
+        A window whose consumer is still iterating it is live and a new one
+        is refused at call time (``_check_window``). One the consumer broke
+        out of without closing the generator is not live; it is closed here
+        so that it cannot block the device forever.
+        """
+        old = prev() if prev is not None else None
+        if old is None or old.ag_frame is None:
+            return
+        if old.ag_running:
+            raise e.CaptureInProgressError("A capture window is already open")
+        await old.aclose()
 
     async def _send(self, command: int, data: bytes = b"") -> bytes:
         """Send a packet to the device."""
@@ -266,10 +300,13 @@ class rmmini(Device):
         and after every ``send_data`` on the same device. Closing the
         generator sends nothing further; the device times out by itself.
         Use ``contextlib.aclosing`` (or iterate to the end) so the window is
-        released promptly. Only one capture window can be open per device;
-        a second raises ``CaptureInProgressError``.
+        released promptly. Only one capture window can be open per device:
+        opening one while another is being iterated raises
+        ``CaptureInProgressError``, and opening one after breaking out of
+        another without closing it closes the old one.
         """
-        return self._capture_loop(
+        prev = self._check_window()
+        gen = self._capture_loop(
             self.enter_learning,
             window,
             stop_after_first,
@@ -277,7 +314,10 @@ class rmmini(Device):
             rearm_interval,
             SignalKind.IR,
             None,
+            prev=prev,
         )
+        self._window = weakref.ref(gen)
+        return gen
 
     async def _capture_loop(
         self,
@@ -288,58 +328,60 @@ class rmmini(Device):
         rearm_interval: float,
         kind: SignalKind,
         frequency_mhz: Optional[float],
+        *,
+        prev: Optional[weakref.ReferenceType] = None,
+        claim: bool = True,
     ) -> AsyncIterator[CapturedSignal]:
         if window < 0:
             raise ValueError("window must be 0 (open-ended) or positive")
         if poll_interval <= 0 or rearm_interval <= 0:
             raise ValueError("poll_interval and rearm_interval must be positive")
-        if self._capture_open:
-            raise e.CaptureInProgressError("A capture window is already open")
+        if claim:
+            await self._claim_window(prev)
 
-        self._capture_open = True
-        try:
-            loop = asyncio.get_running_loop()
-            deadline = loop.time() + window if window else None
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + window if window else None
+        timeouts = 0
+
+        await arm()
+        armed_at = loop.time()
+        generation = self._tx_generation
+
+        while True:
+            now = loop.time()
+            if deadline is not None and now >= deadline:
+                return
+            delay = poll_interval
+            if deadline is not None:
+                delay = min(delay, deadline - now)
+            await asyncio.sleep(delay)
+
+            try:
+                data = await self.check_data()
+            except (e.StorageError, e.ReadError):
+                # "Nothing yet": -5 on the RM4 Pro, -10 on some older
+                # firmware (upstream's CLI and Home Assistant tolerate
+                # both).
+                data = b""
+            except e.NetworkTimeoutError:
+                timeouts += 1
+                if timeouts >= 3:
+                    raise
+                generation = -1  # Re-arm; the device's state is unknown.
+                continue
             timeouts = 0
 
-            await arm()
-            armed_at = loop.time()
-            generation = self._tx_generation
-
-            while True:
-                now = loop.time()
-                if deadline is not None and now >= deadline:
+            if data:
+                yield CapturedSignal.from_packet(data, frequency_mhz, kind=kind)
+                if stop_after_first:
                     return
-                delay = poll_interval
-                if deadline is not None:
-                    delay = min(delay, deadline - now)
-                await asyncio.sleep(delay)
+                generation = -1  # One code per session: re-arm.
 
-                try:
-                    data = await self.check_data()
-                except e.StorageError:
-                    data = b""  # The device's answer for "nothing yet".
-                except e.NetworkTimeoutError:
-                    timeouts += 1
-                    if timeouts >= 3:
-                        raise
-                    generation = -1  # Re-arm; the device's state is unknown.
-                    continue
-                timeouts = 0
-
-                if data:
-                    yield CapturedSignal.from_packet(data, frequency_mhz, kind=kind)
-                    if stop_after_first:
-                        return
-                    generation = -1  # One code per session: re-arm.
-
-                now = loop.time()
-                if generation != self._tx_generation or now - armed_at >= rearm_interval:
-                    await arm()
-                    armed_at = loop.time()
-                    generation = self._tx_generation
-        finally:
-            self._capture_open = False
+            now = loop.time()
+            if generation != self._tx_generation or now - armed_at >= rearm_interval:
+                await arm()
+                armed_at = loop.time()
+                generation = self._tx_generation
 
 
 class rmpro(rmmini):
@@ -369,7 +411,7 @@ class rmpro(rmmini):
         """Cancel sweep frequency."""
         await self._send(0x1E)
 
-    async def capture_rf(
+    def capture_rf(
         self,
         window: float = 30.0,
         *,
@@ -389,24 +431,38 @@ class rmpro(rmmini):
 
         The window, polling, re-arm and stop-after-first semantics are those
         of ``capture``; the sweep counts against the same ``window``. A
-        ``send_data`` during the sweep restarts it. Each ``CapturedSignal``
-        carries the carrier in ``frequency_mhz``, which the packet itself
-        does not record.
+        ``send_data`` during the sweep restarts it. Closing the generator
+        during a sweep sends nothing; the device ends the sweep on its own.
+        Each ``CapturedSignal`` carries the carrier in ``frequency_mhz``,
+        which the packet itself does not record.
         """
-        if self._capture_open:
-            raise e.CaptureInProgressError("A capture window is already open")
+        prev = self._check_window()
+        gen = self._capture_rf_loop(
+            window, frequency, stop_after_first, poll_interval, rearm_interval,
+            prev=prev,
+        )
+        self._window = weakref.ref(gen)
+        return gen
+
+    async def _capture_rf_loop(
+        self,
+        window: float,
+        frequency: Optional[float],
+        stop_after_first: bool,
+        poll_interval: float,
+        rearm_interval: float,
+        *,
+        prev: Optional[weakref.ReferenceType],
+    ) -> AsyncIterator[CapturedSignal]:
         if window < 0 or poll_interval <= 0:
             raise ValueError("window must be 0 or positive, poll_interval positive")
+        await self._claim_window(prev)
 
         loop = asyncio.get_running_loop()
         deadline = loop.time() + window if window else None
 
         if frequency is None:
-            self._capture_open = True
-            try:
-                frequency = await self._sweep(deadline, poll_interval)
-            finally:
-                self._capture_open = False
+            frequency = await self._sweep(deadline, poll_interval)
             if frequency is None:
                 return
             if deadline is not None:
@@ -418,10 +474,15 @@ class rmpro(rmmini):
             await self.find_rf_packet(frequency)
 
         kind = SignalKind.RF_315 if frequency < 400 else SignalKind.RF_433
-        async for signal in self._capture_loop(
-            arm, window, stop_after_first, poll_interval, rearm_interval, kind, frequency
-        ):
-            yield signal
+        inner = self._capture_loop(
+            arm, window, stop_after_first, poll_interval, rearm_interval, kind, frequency,
+            claim=False,
+        )
+        try:
+            async for signal in inner:
+                yield signal
+        finally:
+            await inner.aclose()
 
     async def _sweep(
         self, deadline: Optional[float], poll_interval: float

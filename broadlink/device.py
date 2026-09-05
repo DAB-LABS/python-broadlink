@@ -10,6 +10,7 @@ speaks unprompted, so each device keeps a single datagram endpoint and an
 from __future__ import annotations
 
 import asyncio
+import collections
 import random
 import socket
 from collections.abc import AsyncIterator
@@ -30,8 +31,17 @@ from .protocol import Datetime
 HelloResponse = Tuple[int, Tuple[str, int], bytes, str, bool]
 
 # Device error codes that mean the session key is no longer accepted and a
-# fresh auth() will fix it. -7: control key expired; -4012: control id error.
-_REAUTH_CODES = {-7, -4012}
+# fresh auth() will fix it. -2: logged out; -7: control key expired;
+# -4012: control id error.
+_REAUTH_CODES = {-2, -7, -4012}
+
+# How many timed-out request counters to remember, so that a reply to one
+# of them arriving late is recognised and dropped instead of being taken as
+# the answer to a later request.
+_ABANDONED_MAX = 32
+
+_CLOSED = (None, None)
+"""Sentinel put on the receive queue when the endpoint is closed."""
 
 
 class _Protocol(asyncio.DatagramProtocol):
@@ -203,7 +213,10 @@ class Device:
         self._lock: Optional[asyncio.Lock] = None
         self._transport: Optional[asyncio.DatagramTransport] = None
         self._protocol: Optional[_Protocol] = None
-        self._reauth_ok = True
+        self._endpoint_addr: Optional[Tuple[str, int]] = None
+        self._abandoned: collections.deque[int] = collections.deque(maxlen=_ABANDONED_MAX)
+        self._reauth_lock: Optional[asyncio.Lock] = None
+        self._auth_generation = 0
 
     def __repr__(self) -> str:
         """Return a formal representation of the device."""
@@ -275,6 +288,7 @@ class Device:
 
         self.id = int.from_bytes(payload[:0x4], "little")
         self.update_aes(payload[0x04:0x14])
+        self._auth_generation += 1
         return True
 
     async def hello(self, local_ip_address=None) -> bool:
@@ -363,17 +377,30 @@ class Device:
     # -------------------------------------------------------- transport
 
     async def aclose(self) -> None:
-        """Close the device's endpoint. It is reopened on the next call."""
-        if self._transport is not None:
-            self._transport.close()
-            self._transport = None
-            self._protocol = None
+        """Close the device's endpoint. It is reopened on the next call.
+
+        A request in flight fails at once with ``ConnectionClosedError``
+        rather than waiting out its timeout.
+        """
+        transport, protocol = self._transport, self._protocol
+        self._transport = None
+        self._protocol = None
+        self._endpoint_addr = None
+        if transport is not None:
+            transport.close()
+        if protocol is not None:
+            protocol.queue.put_nowait(_CLOSED)  # type: ignore[arg-type]
 
     async def _endpoint(self) -> tuple[asyncio.DatagramTransport, _Protocol]:
+        if self._transport is not None and self._endpoint_addr != self.host:
+            # The caller changed host; the connected socket points at the
+            # old address, so drop it.
+            await self.aclose()
         if self._transport is None or self._transport.is_closing():
             self._transport, self._protocol = await _open_endpoint(
                 remote_addr=self.host
             )
+            self._endpoint_addr = self.host
         return self._transport, self._protocol  # type: ignore[return-value]
 
     def _frame(self, packet_type: int, payload: bytes) -> bytes:
@@ -419,28 +446,53 @@ class Device:
         return resp
 
     async def _exchange(self, packet: bytes) -> bytes:
-        """Send one frame and wait for one reply, resending on silence."""
+        """Send one frame and wait for its reply, resending on silence.
+
+        Replies carry the request's packet counter (offset 0x28), so a reply
+        is matched to the request by counter. A reply whose counter belongs
+        to a request that already timed out is dropped; one with a counter
+        this device has never sent is accepted, for firmware that may not
+        echo it.
+        """
         transport, protocol = await self._endpoint()
         protocol.drain()
         loop = asyncio.get_running_loop()
         start = loop.time()
         timeout = self.timeout
+        count = int.from_bytes(packet[0x28:0x2A], "little")
 
         while True:
             transport.sendto(packet)
-            time_left = timeout - (loop.time() - start)
-            wait = min(DEFAULT_RETRY_INTVL, time_left)
-            try:
-                resp, _ = await asyncio.wait_for(protocol.queue.get(), max(wait, 0))
-            except asyncio.TimeoutError:
-                if (loop.time() - start) >= timeout:
-                    raise e.NetworkTimeoutError(
-                        -4000,
-                        "Network timeout",
-                        f"No response received within {timeout}s",
-                    ) from None
-                continue
-            return self._validate(resp)
+            resend_at = loop.time() + DEFAULT_RETRY_INTVL
+            while True:
+                now = loop.time()
+                if now - start >= timeout:
+                    break
+                wait = min(resend_at, start + timeout) - now
+                try:
+                    resp, _ = await asyncio.wait_for(protocol.queue.get(), max(wait, 0))
+                except asyncio.TimeoutError:
+                    if loop.time() - start >= timeout:
+                        break
+                    if loop.time() >= resend_at:
+                        break  # Resend.
+                    continue
+                if resp is None:
+                    raise e.ConnectionClosedError(
+                        -4013, "Connection closed", "The device endpoint was closed"
+                    )
+                resp = self._validate(resp)
+                reply_count = int.from_bytes(resp[0x28:0x2A], "little")
+                if reply_count == count or reply_count not in self._abandoned:
+                    return resp
+                # A late answer to a request we gave up on: keep waiting.
+            if loop.time() - start >= timeout:
+                self._abandoned.append(count)
+                raise e.NetworkTimeoutError(
+                    -4000,
+                    "Network timeout",
+                    f"No response received within {timeout}s",
+                ) from None
 
     async def send_packet(
         self, packet_type: int, payload: bytes, *, _reauth: bool = True
@@ -449,22 +501,24 @@ class Device:
 
         If the device answers that the session key is no longer valid, the
         session is re-authenticated once and the request is sent again.
+        Concurrent callers that hit the same expired key share one
+        re-authentication and each retry once.
         """
         if self._lock is None:
             self._lock = asyncio.Lock()
+            self._reauth_lock = asyncio.Lock()
+        generation = self._auth_generation
         async with self._lock:
             resp = await self._exchange(self._frame(packet_type, bytes(payload)))
 
-        if _reauth and self._reauth_ok:
+        if _reauth:
             code = int.from_bytes(resp[0x22:0x24], "little", signed=True)
             if code in _REAUTH_CODES:
-                self._reauth_ok = False
-                try:
-                    await self.auth()
-                    async with self._lock:
-                        resp = await self._exchange(
-                            self._frame(packet_type, bytes(payload))
-                        )
-                finally:
-                    self._reauth_ok = True
+                async with self._reauth_lock:  # type: ignore[union-attr]
+                    if self._auth_generation == generation:
+                        await self.auth()
+                async with self._lock:
+                    resp = await self._exchange(
+                        self._frame(packet_type, bytes(payload))
+                    )
         return resp

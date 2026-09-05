@@ -50,6 +50,7 @@ class FakeRM:
         self.sweeping = False
         self.sweep_answers: list[tuple[bool, float]] = []
         self.timeouts_to_raise = 0
+        self.nothing_yet_code = -5  # -10 on some older firmware
         device.send_packet = self.send_packet  # type: ignore[method-assign]
 
     # -- what the test does to the device
@@ -98,7 +99,7 @@ class FakeRM:
                 self.timeouts_to_raise -= 1
                 return b"", "timeout"
             if self.pending is None:
-                return b"", -5
+                return b"", self.nothing_yet_code
             code, self.pending = self.pending, None
             return code, 0
         if command == CMD_SEND:
@@ -166,7 +167,7 @@ def test_capture_yields_first_signal_and_closes(cls_name, devtype):
     assert fake.commands[0][0] == CMD_LEARN
     assert fake.count(CMD_LEARN) == 1
     assert fake.count(CMD_CHECK) >= 2
-    assert device._capture_open is False
+    assert device.capture_active is False
 
 
 def test_capture_window_elapses_with_nothing():
@@ -175,7 +176,7 @@ def test_capture_window_elapses_with_nothing():
     assert signals == []
     assert fake.count(CMD_LEARN) == 1
     assert fake.count(CMD_CHECK) >= 3
-    assert device._capture_open is False
+    assert device.capture_active is False
 
 
 async def _collect(gen):
@@ -287,7 +288,7 @@ def test_open_ended_window_runs_until_closed():
 
     got = run(go())
     assert len(got) == 1
-    assert device._capture_open is False
+    assert device.capture_active is False
     # Closing sends nothing further to the device.
     assert fake.commands[-1][0] in (CMD_CHECK, CMD_LEARN)
 
@@ -302,13 +303,77 @@ def test_second_window_is_refused():
         await asyncio.sleep(2 * UNIT)
         with pytest.raises(e.CaptureInProgressError):
             await _collect(device.capture(window=1, **FAST))
-        assert device._capture_open is True
+        assert device.capture_active is True
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
 
     run(go())
-    assert device._capture_open is False
+    assert device.capture_active is False
+
+
+def test_abandoned_window_is_closed_by_the_next_one():
+    """A consumer that breaks out of the loop without closing the generator
+    must not block the device; the next window closes the old one."""
+    device, fake = make()
+
+    async def go():
+        asyncio.get_running_loop().create_task(press_later(fake, IR, 2 * UNIT))
+        first = device.capture(window=1, stop_after_first=False, **FAST)
+        async for s in first:
+            got = s
+            break  # Walk away without aclose().
+        assert device.capture_active is True  # The old generator is suspended.
+        assert not first.ag_running
+        asyncio.get_running_loop().create_task(press_later(fake, RF, 2 * UNIT))
+        second = [s async for s in device.capture(window=1, **FAST)]
+        assert first.ag_frame is None  # Closed by the second window.
+        return got, second
+
+    got, second = run(go())
+    assert got.packet == IR
+    assert [s.packet for s in second] == [RF]
+    assert device.capture_active is False
+
+
+def test_unstarted_window_does_not_block():
+    device, fake = make()
+
+    async def go():
+        _unused = device.capture(window=1, **FAST)  # never iterated
+        asyncio.get_running_loop().create_task(press_later(fake, IR, 2 * UNIT))
+        return [s async for s in device.capture(window=1, **FAST)]
+
+    assert len(run(go())) == 1
+
+
+def test_older_firmware_read_error_means_nothing_yet():
+    device, fake = make()
+    fake.nothing_yet_code = -10  # ReadError
+
+    async def go():
+        asyncio.get_running_loop().create_task(press_later(fake, IR, 3 * UNIT))
+        return [s async for s in device.capture(window=1, **FAST)]
+
+    signals = run(go())
+    assert len(signals) == 1
+    assert fake.count(CMD_CHECK) >= 2
+
+
+def test_capture_rf_abandoned_then_ir_window():
+    device, fake = make()
+
+    async def go():
+        asyncio.get_running_loop().create_task(press_later(fake, RF, 2 * UNIT))
+        rf = device.capture_rf(window=1, frequency=433.92, stop_after_first=False, **FAST)
+        async for _ in rf:
+            break
+        asyncio.get_running_loop().create_task(press_later(fake, IR, 2 * UNIT))
+        return [s async for s in device.capture(window=1, **FAST)]
+
+    signals = run(go())
+    assert [s.kind for s in signals] == [SignalKind.IR]
+    assert device.capture_active is False
 
 
 def test_transport_timeouts_rearm_then_give_up():
@@ -327,7 +392,7 @@ def test_transport_timeouts_rearm_then_give_up():
     fake.timeouts_to_raise = 3
     with pytest.raises(e.NetworkTimeoutError):
         run(_collect(device.capture(window=1, **FAST)))
-    assert device._capture_open is False
+    assert device.capture_active is False
 
 
 def test_capture_rejects_bad_arguments():
@@ -417,7 +482,7 @@ def test_capture_rf_sweep_that_never_locks_is_cancelled():
     assert fake.count(CMD_CANCEL_SWEEP) == 1
     assert fake.count(CMD_FIND_RF) == 0
     assert fake.sweeping is False
-    assert device._capture_open is False
+    assert device.capture_active is False
 
 
 def test_send_during_sweep_restarts_it():
@@ -457,7 +522,7 @@ def test_capture_rf_refused_while_ir_window_open():
             await task
 
     run(go())
-    assert device._capture_open is False
+    assert device.capture_active is False
 
 
 def test_rf_capture_is_only_on_pro_classes():
