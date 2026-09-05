@@ -6,9 +6,9 @@ This is a command line interface for the python-broadlink API.
 
 Requirements
 ------------
-You need to install the module first:
+You need to install the module first (Python 3.13 or newer):
 ```
-pip3 install broadlink
+pip install python-broadlink
 ```
 
 Installation
@@ -67,7 +67,13 @@ broadlink_cli --device @BEDROOM.device --learn
 
 #### Learn RF code and show at console
 ```
-broadlink_cli --device @BEDROOM.device --rfscanlearn
+broadlink_cli --device @BEDROOM.device --rflearn
+```
+The device sweeps for the remote's carrier while you hold a button, then
+learns the code from a short press. The sweep is unreliable on some
+firmware; if you know the carrier, skip it:
+```
+broadlink_cli --device @BEDROOM.device --rflearn --frequency 433.92
 ```
 
 #### Learn IR code and save to file
@@ -77,7 +83,14 @@ broadlink_cli --device @BEDROOM.device --learnfile LG-TV.power
 
 #### Learn RF code and save to file
 ```
-broadlink_cli --device @BEDROOM.device --rfscanlearn --learnfile LG-TV.power
+broadlink_cli --device @BEDROOM.device --rflearn --learnfile LG-TV.power
+```
+
+#### Listen for longer, or for several codes
+`--window` sets how many seconds to listen (default 30); `--keep` prints
+every code heard during the window instead of stopping at the first:
+```
+broadlink_cli --device @BEDROOM.device --learn --window 120 --keep
 ```
 
 #### Send code
@@ -88,6 +101,11 @@ broadlink_cli --device @BEDROOM.device --send DATA
 #### Send code from file
 ```
 broadlink_cli --device @BEDROOM.device --send @LG-TV.power
+```
+
+#### Send microsecond durations, repeated
+```
+broadlink_cli --device @BEDROOM.device --send --durations --repeat 2 +9000 -4500 +560 -560
 ```
 
 #### Check temperature

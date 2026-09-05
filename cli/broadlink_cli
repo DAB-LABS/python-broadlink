@@ -2,13 +2,14 @@
 import argparse
 import asyncio
 import base64
+import sys
 import time
+from contextlib import aclosing
 from typing import List
 
 import broadlink
 from broadlink.const import DEFAULT_PORT
-from broadlink.exceptions import ReadError, StorageError
-from broadlink.remote import data_to_pulses, pulses_to_data
+from broadlink.remote import CapturedSignal, data_to_pulses, pulses_to_data
 
 TIMEOUT = 30
 
@@ -28,6 +29,35 @@ def format_pulses(pulses: List[int]) -> str:
 def parse_pulses(data: List[str]) -> List[int]:
     """Parse pulses."""
     return [abs(int(s)) for s in data]
+
+
+def show(signal: CapturedSignal) -> None:
+    """Print a captured signal in every format and save it if asked."""
+    raw_fmt = signal.packet.hex()
+    base64_fmt = base64.b64encode(signal.packet).decode('ascii')
+    pulse_fmt = format_pulses(signal.pulses)
+
+    print("Packet found!")
+    if signal.frequency_mhz:
+        print("Frequency: {}MHz".format(signal.frequency_mhz))
+    print("Raw:", raw_fmt)
+    print("Base64:", base64_fmt)
+    print("Pulses:", pulse_fmt)
+
+    if args.learnfile:
+        print("Saving to {}".format(args.learnfile))
+        with open(args.learnfile, "w") as text_file:
+            text_file.write(pulse_fmt if args.durations else raw_fmt)
+
+
+async def listen(window) -> int:
+    """Drain a capture window, printing each signal; return how many."""
+    heard = 0
+    async with aclosing(window) as signals:
+        async for signal in signals:
+            heard += 1
+            show(signal)
+    return heard
 
 
 parser = argparse.ArgumentParser(fromfile_prefix_chars='@')
@@ -51,6 +81,12 @@ parser.add_argument("--learn", action="store_true", help="learn command")
 parser.add_argument("--rflearn", action="store_true", help="rf scan learning")
 parser.add_argument("--frequency", type=float, help="specify radiofrequency for learning")
 parser.add_argument("--learnfile", help="save learned command to a specified file")
+parser.add_argument("--window", type=float, default=TIMEOUT,
+                    help="seconds to keep listening while learning (default %(default)s)")
+parser.add_argument("--keep", action="store_true",
+                    help="keep listening for the whole window and print every code heard")
+parser.add_argument("--repeat", type=int, default=0,
+                    help="with --send --durations: extra transmissions after the first")
 parser.add_argument("--durations", action="store_true",
                     help="use durations in micro seconds instead of the Broadlink format")
 parser.add_argument("--convert", action="store_true", help="convert input data to durations")
@@ -95,40 +131,17 @@ async def main():
             print("{} {}".format(key, data[key]))
     if args.send:
         data = (
-            pulses_to_data(parse_pulses(args.data))
+            pulses_to_data(parse_pulses(args.data), repeat=args.repeat)
             if args.durations
             else bytes.fromhex(''.join(args.data))
         )
         await dev.send_data(data)
     if args.learn or (args.learnfile and not args.rflearn):
-        await dev.enter_learning()
         print("Learning...")
-        start = time.time()
-        while time.time() - start < TIMEOUT:
-            await asyncio.sleep(1)
-            try:
-                data = await dev.check_data()
-            except (ReadError, StorageError):
-                continue
-            else:
-                break
-        else:
+        heard = await listen(dev.capture(window=args.window, stop_after_first=not args.keep))
+        if not heard:
             print("No data received...")
-            exit(1)
-
-        print("Packet found!")
-        raw_fmt = data.hex()
-        base64_fmt = base64.b64encode(data).decode('ascii')
-        pulse_fmt = format_pulses(data_to_pulses(data))
-
-        print("Raw:", raw_fmt)
-        print("Base64:", base64_fmt)
-        print("Pulses:", pulse_fmt)
-
-        if args.learnfile:
-            print("Saving to {}".format(args.learnfile))
-            with open(args.learnfile, "w") as text_file:
-                text_file.write(pulse_fmt if args.durations else raw_fmt)
+            sys.exit(1)
     if args.check:
         if await dev.check_power():
             print('* ON *')
@@ -187,7 +200,7 @@ async def main():
             else:
                 print("Radiofrequency not found")
                 await dev.cancel_sweep_frequency()
-                exit(1)
+                sys.exit(1)
 
             print("Radiofrequency detected: {}MHz".format(frequency))
             print("You can now let go of the button")
@@ -196,34 +209,12 @@ async def main():
 
             print("Press the button again, now a short press.")
 
-        await dev.find_rf_packet(frequency)
-
-        start = time.time()
-        while time.time() - start < TIMEOUT:
-            await asyncio.sleep(1)
-            try:
-                data = await dev.check_data()
-            except (ReadError, StorageError):
-                continue
-            else:
-                break
-        else:
+        heard = await listen(
+            dev.capture_rf(window=args.window, frequency=frequency, stop_after_first=not args.keep)
+        )
+        if not heard:
             print("No data received...")
-            exit(1)
-
-        print("Packet found!")
-        raw_fmt = data.hex()
-        base64_fmt = base64.b64encode(data).decode('ascii')
-        pulse_fmt = format_pulses(data_to_pulses(data))
-
-        print("Raw:", raw_fmt)
-        print("Base64:", base64_fmt)
-        print("Pulses:", pulse_fmt)
-
-        if args.learnfile:
-            print("Saving to {}".format(args.learnfile))
-            with open(args.learnfile, "w") as text_file:
-                text_file.write(pulse_fmt if args.durations else raw_fmt)
+            sys.exit(1)
 
 
 if __name__ == "__main__":

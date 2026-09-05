@@ -134,7 +134,12 @@ async def press_later(fake: FakeRM, packet: bytes, delay: float) -> bool:
     return fake.press(packet)
 
 
-FAST = dict(poll_interval=0.01, rearm_interval=10.0)
+# Every delay below is a multiple of this unit. The windows and presses are
+# tens of milliseconds apart, which is plenty on a laptop but tight on a
+# loaded CI runner, so the unit is deliberately generous.
+UNIT = 0.03
+
+FAST = dict(poll_interval=UNIT, rearm_interval=10.0)
 
 
 # ------------------------------------------------------------- IR windows
@@ -146,7 +151,7 @@ def test_capture_yields_first_signal_and_closes(cls_name, devtype):
     device, fake = make(cls_name, devtype)
 
     async def go():
-        asyncio.get_running_loop().create_task(press_later(fake, IR, 0.03))
+        asyncio.get_running_loop().create_task(press_later(fake, IR, 3 * UNIT))
         signals = [s async for s in device.capture(window=2, **FAST)]
         return signals
 
@@ -166,7 +171,7 @@ def test_capture_yields_first_signal_and_closes(cls_name, devtype):
 
 def test_capture_window_elapses_with_nothing():
     device, fake = make()
-    signals = run(_collect(device.capture(window=0.05, **FAST)))
+    signals = run(_collect(device.capture(window=5 * UNIT, **FAST)))
     assert signals == []
     assert fake.count(CMD_LEARN) == 1
     assert fake.count(CMD_CHECK) >= 3
@@ -182,9 +187,9 @@ def test_capture_keeps_going_and_rearms_after_each_code():
 
     async def go():
         loop = asyncio.get_running_loop()
-        loop.create_task(press_later(fake, IR, 0.02))
-        loop.create_task(press_later(fake, RF, 0.06))
-        return [s async for s in device.capture(window=0.12, stop_after_first=False, **FAST)]
+        loop.create_task(press_later(fake, IR, 2 * UNIT))
+        loop.create_task(press_later(fake, RF, 6 * UNIT))
+        return [s async for s in device.capture(window=12 * UNIT, stop_after_first=False, **FAST)]
 
     signals = run(go())
     assert [s.packet for s in signals] == [IR, RF]
@@ -202,14 +207,14 @@ def test_press_between_code_and_rearm_is_lost_but_next_is_not():
         results = []
 
         async def presses():
-            await asyncio.sleep(0.02)
+            await asyncio.sleep(2 * UNIT)
             results.append(fake.press(IR))
             results.append(fake.press(RF))  # Device not armed: lost.
-            await asyncio.sleep(0.03)
+            await asyncio.sleep(3 * UNIT)
             results.append(fake.press(RF))  # Re-armed by then.
 
         loop.create_task(presses())
-        signals = [s async for s in device.capture(window=0.1, stop_after_first=False, **FAST)]
+        signals = [s async for s in device.capture(window=10 * UNIT, stop_after_first=False, **FAST)]
         return results, signals
 
     results, signals = run(go())
@@ -222,15 +227,15 @@ def test_send_during_window_rearms():
 
     async def go():
         async def send_then_press():
-            await asyncio.sleep(0.02)
+            await asyncio.sleep(2 * UNIT)
             await device.send_data(IR)
             fake.expire()  # Whatever the send did to the session, assume the worst.
-            await asyncio.sleep(0.03)
+            await asyncio.sleep(3 * UNIT)
             return fake.press(RF)
 
         loop = asyncio.get_running_loop()
         task = loop.create_task(send_then_press())
-        signals = [s async for s in device.capture(window=0.2, **FAST)]
+        signals = [s async for s in device.capture(window=20 * UNIT, **FAST)]
         return await task, signals
 
     pressed, signals = run(go())
@@ -248,16 +253,16 @@ def test_timed_rearm_recovers_from_silent_expiry():
 
     async def go():
         async def expire_then_press():
-            await asyncio.sleep(0.02)
+            await asyncio.sleep(2 * UNIT)
             fake.expire()
             assert fake.press(IR) is False  # Lost: the device is deaf.
-            await asyncio.sleep(0.05)  # Past the re-arm interval.
+            await asyncio.sleep(5 * UNIT)  # Past the re-arm interval.
             return fake.press(IR)
 
         loop = asyncio.get_running_loop()
         task = loop.create_task(expire_then_press())
         signals = [
-            s async for s in device.capture(window=0.3, poll_interval=0.01, rearm_interval=0.04)
+            s async for s in device.capture(window=30 * UNIT, poll_interval=1 * UNIT, rearm_interval=4 * UNIT)
         ]
         return await task, signals
 
@@ -273,7 +278,7 @@ def test_open_ended_window_runs_until_closed():
     async def go():
         got = []
         async with aclosing(device.capture(window=0, stop_after_first=False, **FAST)) as gen:
-            asyncio.get_running_loop().create_task(press_later(fake, IR, 0.02))
+            asyncio.get_running_loop().create_task(press_later(fake, IR, 2 * UNIT))
             async for s in gen:
                 got.append(s)
                 if len(got) == 1:
@@ -294,7 +299,7 @@ def test_second_window_is_refused():
         task = asyncio.get_running_loop().create_task(
             _collect(device.capture(window=1, **FAST))
         )
-        await asyncio.sleep(0.02)
+        await asyncio.sleep(2 * UNIT)
         with pytest.raises(e.CaptureInProgressError):
             await _collect(device.capture(window=1, **FAST))
         assert device._capture_open is True
@@ -311,7 +316,7 @@ def test_transport_timeouts_rearm_then_give_up():
     fake.timeouts_to_raise = 2
 
     async def go():
-        asyncio.get_running_loop().create_task(press_later(fake, IR, 0.05))
+        asyncio.get_running_loop().create_task(press_later(fake, IR, 5 * UNIT))
         return [s async for s in device.capture(window=1, **FAST)]
 
     signals = run(go())
@@ -342,7 +347,7 @@ def test_capture_rf_with_known_frequency_skips_the_sweep():
     device, fake = make()
 
     async def go():
-        asyncio.get_running_loop().create_task(press_later(fake, RF, 0.03))
+        asyncio.get_running_loop().create_task(press_later(fake, RF, 3 * UNIT))
         return [s async for s in device.capture_rf(window=1, frequency=433.92, **FAST)]
 
     signals = run(go())
@@ -363,7 +368,7 @@ def test_capture_rf_yields_despite_odd_type_byte():
     odd = bytes([0xB1]) + RF[1:]
 
     async def go():
-        asyncio.get_running_loop().create_task(press_later(fake, odd, 0.03))
+        asyncio.get_running_loop().create_task(press_later(fake, odd, 3 * UNIT))
         return [s async for s in device.capture_rf(window=1, frequency=433.92, **FAST)]
 
     signals = run(go())
@@ -377,7 +382,7 @@ def test_capture_rf_below_400mhz_is_tagged_315():
     device, fake = make()
 
     async def go():
-        asyncio.get_running_loop().create_task(press_later(fake, RF, 0.03))
+        asyncio.get_running_loop().create_task(press_later(fake, RF, 3 * UNIT))
         return [s async for s in device.capture_rf(window=1, frequency=315.0, **FAST)]
 
     signals = run(go())
@@ -389,7 +394,7 @@ def test_capture_rf_sweeps_then_learns():
     fake.sweep_answers = [(False, 0.0), (False, 0.0), (True, 433.92)]
 
     async def go():
-        asyncio.get_running_loop().create_task(press_later(fake, RF, 0.08))
+        asyncio.get_running_loop().create_task(press_later(fake, RF, 8 * UNIT))
         return [s async for s in device.capture_rf(window=1, **FAST)]
 
     signals = run(go())
@@ -406,7 +411,7 @@ def test_capture_rf_sweeps_then_learns():
 
 def test_capture_rf_sweep_that_never_locks_is_cancelled():
     device, fake = make()
-    signals = run(_collect(device.capture_rf(window=0.05, **FAST)))
+    signals = run(_collect(device.capture_rf(window=5 * UNIT, **FAST)))
     assert signals == []
     assert fake.count(CMD_SWEEP) == 1
     assert fake.count(CMD_CANCEL_SWEEP) == 1
@@ -421,12 +426,12 @@ def test_send_during_sweep_restarts_it():
 
     async def go():
         async def send():
-            await asyncio.sleep(0.02)
+            await asyncio.sleep(2 * UNIT)
             await device.send_data(IR)
 
         loop = asyncio.get_running_loop()
         loop.create_task(send())
-        loop.create_task(press_later(fake, RF, 0.2))
+        loop.create_task(press_later(fake, RF, 20 * UNIT))
         return [s async for s in device.capture_rf(window=1, **FAST)]
 
     signals = run(go())
@@ -442,7 +447,7 @@ def test_capture_rf_refused_while_ir_window_open():
         task = asyncio.get_running_loop().create_task(
             _collect(device.capture(window=1, **FAST))
         )
-        await asyncio.sleep(0.02)
+        await asyncio.sleep(2 * UNIT)
         with pytest.raises(e.CaptureInProgressError):
             await _collect(device.capture_rf(window=1, frequency=433.92, **FAST))
         with pytest.raises(e.CaptureInProgressError):

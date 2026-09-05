@@ -11,8 +11,8 @@ A Python module and CLI for controlling Broadlink devices locally.
 > upstream [#839](https://github.com/mjg59/python-broadlink/issues/839)
 > (fix in [#841](https://github.com/mjg59/python-broadlink/pull/841)) and
 > adds the devices waiting in upstream's pull request queue, including the
-> RM Max and RM5 Plus. Version 1.0 will be asynchronous; see `CHANGELOG.md`.
-> Upstream's credit and MIT license are preserved.
+> RM Max and RM5 Plus. Version 1.0 is asynchronous and adds `capture()`;
+> see `CHANGELOG.md`. Upstream's credit and MIT license are preserved.
 
 ## Version 1.0 is asynchronous
 
@@ -166,9 +166,9 @@ await device.sweep_frequency()
 2. When the LED blinks, point the remote at the Broadlink device for the first time and long press the button you want to learn.
 3. Check if the frequency was successfully identified:
 ```python3
-ok = device.check_frequency()
+ok, frequency = await device.check_frequency()
 if ok:
-    print('Frequency found!')
+    print(f'Frequency found: {frequency} MHz')
 ```
 4. Enter learning mode:
 ```python3
@@ -251,12 +251,12 @@ await device.set_power(False)
 
 ### Checking power state
 ```python3
-state = device.check_power()
+state = await device.check_power()
 ```
 
 ### Checking energy consumption
 ```python3
-state = device.get_energy()
+state = await device.get_energy()
 ```
 
 ## Power strips
@@ -269,14 +269,14 @@ await device.set_power(1, False)
 
 ### Checking power state
 ```python3
-state = device.check_power()
+state = await device.check_power()
 ```
 
 ## Light bulbs
 
 ### Fetching data
 ```python3
-state = device.get_state()
+state = await device.get_state()
 ```
 
 ### Setting state attributes
