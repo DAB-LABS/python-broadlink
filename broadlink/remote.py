@@ -1,18 +1,29 @@
 """Support for universal remotes."""
+
 import struct
 from typing import List, Optional, Tuple
 
 from . import exceptions as e
 from .device import Device
 
+TICK = 8192 / 269
+"""Duration of one Broadlink timing unit in microseconds (about 30.45 us).
 
-def pulses_to_data(pulses: List[int], tick: float = 32.84) -> bytes:
+The RM firmware counts pulses on a 32768 Hz clock (protocol.md: us * 269 / 8192).
+Earlier releases used 32.84, the inverse of the right ratio applied the wrong
+way round, which compressed externally sourced IR codes by about 7 percent
+(mjg59/python-broadlink#839). Codes learned and replayed through the same
+device were unaffected because both directions shared the constant.
+"""
+
+
+def pulses_to_data(pulses: List[int], tick: float = TICK) -> bytes:
     """Convert a microsecond duration sequence into a Broadlink IR packet."""
     result = bytearray(4)
     result[0x00] = 0x26
 
     for pulse in pulses:
-        div, mod = divmod(int(pulse // tick), 256)
+        div, mod = divmod(round(pulse / tick), 256)
         if div:
             result.append(0)
             result.append(div)
@@ -25,7 +36,7 @@ def pulses_to_data(pulses: List[int], tick: float = 32.84) -> bytes:
     return result
 
 
-def data_to_pulses(data: bytes, tick: float = 32.84) -> List[int]:
+def data_to_pulses(data: bytes, tick: float = TICK) -> List[int]:
     """Parse a Broadlink packet into a microsecond duration sequence."""
     result = []
     index = 4
@@ -171,3 +182,9 @@ class rm4(rm4pro):
     """For backwards compatibility."""
 
     TYPE = "RM4"
+
+
+class rm5plus(rmminib):
+    """Controls a Broadlink RM5 Plus."""
+
+    TYPE = "RM5PLUS"

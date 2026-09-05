@@ -11,7 +11,7 @@ from .cover import dooya, dooya2, wser
 from .device import Device, _open_endpoint, ping, scan
 from .hub import s3
 from .light import lb1, lb2
-from .remote import rm, rm4, rm4mini, rm4pro, rmmini, rmminib, rmpro
+from .remote import rm, rm4, rm4mini, rm4pro, rm5plus, rmmini, rmminib, rmpro
 from .sensor import a1, a2
 from .switch import bg1, ehc31, mp1, mp1s, sp1, sp2, sp2s, sp3, sp3s, sp4, sp4b
 
@@ -63,6 +63,7 @@ SUPPORTED_TYPES = {
         0x7583: ("SP mini 3", "Broadlink"),
         0x7587: ("SP4L-UK", "Broadlink"),
         0x7D11: ("SP mini 3", "Broadlink"),
+        0x7D15: ("SP mini 3-AL", "Broadlink (OEM)"),
         0xA4F9: ("WS4", "Broadlink (OEM)"),
         0xA569: ("SP4L-UK", "Broadlink"),
         0xA56A: ("MCB1", "Broadlink"),
@@ -71,6 +72,7 @@ SUPPORTED_TYPES = {
         0xA576: ("SP4L-AU", "Broadlink"),
         0xA589: ("SP4L-UK", "Broadlink"),
         0xA5D3: ("SP4L-EU", "Broadlink"),
+        0xA57A: ("SP4", "Broadlink"),
         0xA6F4: ("SP4D-US", "Broadlink"),
     },
     sp4b: {
@@ -90,6 +92,7 @@ SUPPORTED_TYPES = {
         0x27B7: ("RM mini 3", "Broadlink"),
         0x27C2: ("RM mini 3", "Broadlink"),
         0x27C7: ("RM mini 3", "Broadlink"),
+        0x27C8: ("RM mini 3", "Broadlink"),  # CMCC version
         0x27CC: ("RM mini 3", "Broadlink"),
         0x27CD: ("RM mini 3", "Broadlink"),
         0x27D0: ("RM mini 3", "Broadlink"),
@@ -97,6 +100,7 @@ SUPPORTED_TYPES = {
         0x27D3: ("RM mini 3", "Broadlink"),
         0x27DC: ("RM mini 3", "Broadlink"),
         0x27DE: ("RM mini 3", "Broadlink"),
+        0xA544: ("RM mini 3", "Broadlink (OEM)"),
     },
     rmpro: {
         0x2712: ("RM pro/pro+", "Broadlink"),
@@ -112,6 +116,7 @@ SUPPORTED_TYPES = {
         0x27A6: ("RM plus", "Broadlink"),
         0x27A9: ("RM pro+", "Broadlink"),
         0x27C3: ("RM pro+", "Broadlink"),
+        0xAF8B: ("RM Max", "Broadlink"),
     },
     rmminib: {
         0x5F36: ("RM mini 3", "Broadlink"),
@@ -147,6 +152,9 @@ SUPPORTED_TYPES = {
         0x649B: ("RM4 pro", "Broadlink"),
         0x653C: ("RM4 pro", "Broadlink"),
     },
+    rm5plus: {
+        0x5224: ("RM5 plus", "Broadlink"),
+    },
     a1: {
         0x2714: ("A1", "Broadlink"),
     },
@@ -155,6 +163,7 @@ SUPPORTED_TYPES = {
     },
     mp1: {
         0x4EB5: ("MP1-1K4S", "Broadlink"),
+        0x4EDA: ("MP1-1K3S2U", "Broadlink"),
         0x4F1B: ("MP1-1K3S2U", "Broadlink (OEM)"),
         0x4F65: ("MP1-1K3S2U", "Broadlink"),
     },
@@ -173,11 +182,13 @@ SUPPORTED_TYPES = {
         0x644C: ("LB27 R1", "Broadlink"),
         0x644E: ("LB26 R1", "Broadlink"),
         0x6488: ("LB27 C1", "Broadlink"),
+        0x6498: ("SMART+ WIFI CEILING TW 24W", "LEDVANCE"),
     },
     lb2: {
         0xA4F4: ("LB27 R1", "Broadlink"),
         0xA5F7: ("LB27 R1", "Broadlink"),
         0xA6EF: ("EFCF60WSMT", "Luceco"),
+        0xA517: ("LB26 R1", "Broadlink"),
     },
     S1C: {
         0x2722: ("S2KIT", "Broadlink"),
