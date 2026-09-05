@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import asyncio
 import collections
+import contextlib
+import logging
 import random
 import socket
 from collections.abc import AsyncIterator
-from typing import Optional, Tuple, Union
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -28,17 +29,21 @@ from .const import (
 )
 from .protocol import Datetime
 
-HelloResponse = Tuple[int, Tuple[str, int], bytes, str, bool]
+_LOGGER = logging.getLogger(__name__)
+
+HelloResponse = tuple[int, tuple[str, int], bytes, str, bool]
 
 # Device error codes that mean the session key is no longer accepted and a
 # fresh auth() will fix it. -2: logged out; -7: control key expired;
 # -4012: control id error.
 _REAUTH_CODES = {-2, -7, -4012}
 
-# How many timed-out request counters to remember, so that a reply to one
-# of them arriving late is recognised and dropped instead of being taken as
-# the answer to a later request.
-_ABANDONED_MAX = 32
+# How many recently used request counters to remember. A reply carrying one
+# of them (other than the current request's) is a late or duplicate answer
+# to an earlier request and is dropped rather than taken as the answer to
+# the current one. 64 covers a burst of resends comfortably and ages out
+# long before the 16-bit counter wraps.
+_RECENT_MAX = 64
 
 _CLOSED = (None, None)
 """Sentinel put on the receive queue when the endpoint is closed."""
@@ -49,8 +54,7 @@ class _Protocol(asyncio.DatagramProtocol):
 
     def __init__(self) -> None:
         self.queue: asyncio.Queue[tuple[bytes, tuple[str, int]]] = asyncio.Queue()
-        self.transport: Optional[asyncio.DatagramTransport] = None
-        self.closed = asyncio.get_running_loop().create_future()
+        self.transport: asyncio.DatagramTransport | None = None
 
     def connection_made(self, transport) -> None:  # type: ignore[override]
         self.transport = transport
@@ -63,9 +67,8 @@ class _Protocol(asyncio.DatagramProtocol):
         # the retry loop will time out and raise NetworkTimeoutError.
         pass
 
-    def connection_lost(self, exc: Optional[Exception]) -> None:
-        if not self.closed.done():
-            self.closed.set_result(None)
+    def connection_lost(self, exc: Exception | None) -> None:
+        pass
 
     def drain(self) -> None:
         """Drop anything that arrived before the current request."""
@@ -74,8 +77,8 @@ class _Protocol(asyncio.DatagramProtocol):
 
 
 async def _open_endpoint(
-    local_addr: Optional[tuple[str, int]] = None,
-    remote_addr: Optional[tuple[str, int]] = None,
+    local_addr: tuple[str, int] | None = None,
+    remote_addr: tuple[str, int] | None = None,
     broadcast: bool = False,
 ) -> tuple[asyncio.DatagramTransport, _Protocol]:
     """Create a UDP endpoint. Tests replace this to fake the network."""
@@ -111,7 +114,7 @@ def _parse_hello(resp: bytes, host: tuple[str, int]) -> HelloResponse:
 
 async def scan(
     timeout: float = DEFAULT_TIMEOUT,
-    local_ip_address: Optional[str] = None,
+    local_ip_address: str | None = None,
     discover_ip_address: str = DEFAULT_BCAST_ADDR,
     discover_ip_port: int = DEFAULT_PORT,
 ) -> AsyncIterator[HelloResponse]:
@@ -144,7 +147,7 @@ async def scan(
                     break
                 try:
                     resp, host = await asyncio.wait_for(protocol.queue.get(), remaining)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     break
                 if len(resp) < 0x80:
                     continue
@@ -184,8 +187,8 @@ class Device:
 
     def __init__(
         self,
-        host: Tuple[str, int],
-        mac: Union[bytes, str],
+        host: tuple[str, int],
+        mac: bytes | str,
         devtype: int,
         timeout: float = DEFAULT_TIMEOUT,
         name: str = "",
@@ -210,42 +213,32 @@ class Device:
         self.aes = None
         self.update_aes(bytes.fromhex(self.__INIT_KEY))
 
-        self._lock: Optional[asyncio.Lock] = None
-        self._transport: Optional[asyncio.DatagramTransport] = None
-        self._protocol: Optional[_Protocol] = None
-        self._endpoint_addr: Optional[Tuple[str, int]] = None
-        self._abandoned: collections.deque[int] = collections.deque(maxlen=_ABANDONED_MAX)
-        self._reauth_lock: Optional[asyncio.Lock] = None
+        self._lock: asyncio.Lock | None = None
+        self._transport: asyncio.DatagramTransport | None = None
+        self._protocol: _Protocol | None = None
+        self._endpoint_addr: tuple[str, int] | None = None
+        self._recent: collections.deque[int] = collections.deque(maxlen=_RECENT_MAX)
+        self._reauth_lock: asyncio.Lock | None = None
         self._auth_generation = 0
 
     def __repr__(self) -> str:
         """Return a formal representation of the device."""
         return (
-            "%s.%s(%s, mac=%r, devtype=%r, timeout=%r, name=%r, "
-            "model=%r, manufacturer=%r, is_locked=%r)"
-        ) % (
-            self.__class__.__module__,
-            self.__class__.__qualname__,
-            self.host,
-            self.mac,
-            self.devtype,
-            self.timeout,
-            self.name,
-            self.model,
-            self.manufacturer,
-            self.is_locked,
+            f"{self.__class__.__module__}.{self.__class__.__qualname__}("
+            f"{self.host}, mac={self.mac!r}, devtype={self.devtype!r}, "
+            f"timeout={self.timeout!r}, name={self.name!r}, "
+            f"model={self.model!r}, manufacturer={self.manufacturer!r}, "
+            f"is_locked={self.is_locked!r})"
         )
 
     def __str__(self) -> str:
         """Return a readable representation of the device."""
-        return "%s (%s / %s:%s / %s)" % (
-            self.name or "Unknown",
-            " ".join(filter(None, [self.manufacturer, self.model, hex(self.devtype)])),
-            *self.host,
-            ":".join(format(x, "02X") for x in self.mac),
-        )
+        ident = " ".join(filter(None, [self.manufacturer, self.model, hex(self.devtype)]))
+        mac = ":".join(format(x, "02X") for x in self.mac)
+        name = self.name or "Unknown"
+        return f"{name} ({ident} / {self.host[0]}:{self.host[1]} / {mac})"
 
-    async def __aenter__(self) -> "Device":
+    async def __aenter__(self) -> Device:
         return self
 
     async def __aexit__(self, *exc) -> None:
@@ -272,23 +265,31 @@ class Device:
     # ---------------------------------------------------------- session
 
     async def auth(self) -> bool:
-        """Authenticate to the device."""
-        self.id = 0
-        self.update_aes(bytes.fromhex(self.__INIT_KEY))
+        """Authenticate to the device.
 
+        The session reset, the exchange and the install of the new key all
+        happen while holding the request lock, so a request queued behind
+        the lock is never framed with the initial key or device id 0.
+        """
         packet = bytearray(0x50)
         packet[0x04:0x14] = [0x31] * 16
         packet[0x1E] = 0x01
         packet[0x2D] = 0x01
-        packet[0x30:0x36] = "Test 1".encode()
+        packet[0x30:0x36] = b"Test 1"
 
-        response = await self.send_packet(0x65, packet, _reauth=False)
-        e.check_error(response[0x22:0x24])
-        payload = self.decrypt(response[0x38:])
-
-        self.id = int.from_bytes(payload[:0x4], "little")
-        self.update_aes(payload[0x04:0x14])
-        self._auth_generation += 1
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+            self._reauth_lock = asyncio.Lock()
+        async with self._lock:
+            self.id = 0
+            self.update_aes(bytes.fromhex(self.__INIT_KEY))
+            response = await self._exchange(self._frame(0x65, bytes(packet)))
+            e.check_error(response[0x22:0x24])
+            payload = self.decrypt(response[0x38:])
+            self.id = int.from_bytes(payload[:0x4], "little")
+            self.update_aes(payload[0x04:0x14])
+            self._auth_generation += 1
+        _LOGGER.debug("%s: authenticated, session id %d", self.host[0], self.id)
         return True
 
     async def hello(self, local_ip_address=None) -> bool:
@@ -296,15 +297,17 @@ class Device:
 
         Device information is checked before updating name and lock status.
         """
-        responses = scan(
-            timeout=self.timeout,
-            local_ip_address=local_ip_address,
-            discover_ip_address=self.host[0],
-            discover_ip_port=self.host[1],
-        )
         entry = None
-        async for entry in responses:
-            break
+        async with contextlib.aclosing(
+            scan(
+                timeout=self.timeout,
+                local_ip_address=local_ip_address,
+                discover_ip_address=self.host[0],
+                discover_ip_port=self.host[1],
+            )
+        ) as responses:
+            async for entry in responses:  # noqa: B007 - first reply only
+                break
         if entry is None:
             raise e.NetworkTimeoutError(
                 -4000,
@@ -388,6 +391,7 @@ class Device:
         self._endpoint_addr = None
         if transport is not None:
             transport.close()
+            _LOGGER.debug("%s: endpoint closed", self.host[0])
         if protocol is not None:
             protocol.queue.put_nowait(_CLOSED)  # type: ignore[arg-type]
 
@@ -397,10 +401,9 @@ class Device:
             # old address, so drop it.
             await self.aclose()
         if self._transport is None or self._transport.is_closing():
-            self._transport, self._protocol = await _open_endpoint(
-                remote_addr=self.host
-            )
+            self._transport, self._protocol = await _open_endpoint(remote_addr=self.host)
             self._endpoint_addr = self.host
+            _LOGGER.debug("%s: endpoint opened", self.host[0])
         return self._transport, self._protocol  # type: ignore[return-value]
 
     def _frame(self, packet_type: int, payload: bytes) -> bytes:
@@ -450,8 +453,9 @@ class Device:
 
         Replies carry the request's packet counter (offset 0x28), so a reply
         is matched to the request by counter. A reply whose counter belongs
-        to a request that already timed out is dropped; one with a counter
-        this device has never sent is accepted, for firmware that may not
+        to any other recent request (a late answer, or the second answer to
+        a request that was resent) is dropped; one with a counter this
+        device has not used recently is accepted, for firmware that may not
         echo it.
         """
         transport, protocol = await self._endpoint()
@@ -460,9 +464,14 @@ class Device:
         start = loop.time()
         timeout = self.timeout
         count = int.from_bytes(packet[0x28:0x2A], "little")
+        self._recent.append(count)
+        sends = 0
 
         while True:
             transport.sendto(packet)
+            sends += 1
+            if sends > 1:
+                _LOGGER.debug("%s: no reply, resending (%d)", self.host[0], sends)
             resend_at = loop.time() + DEFAULT_RETRY_INTVL
             while True:
                 now = loop.time()
@@ -471,32 +480,34 @@ class Device:
                 wait = min(resend_at, start + timeout) - now
                 try:
                     resp, _ = await asyncio.wait_for(protocol.queue.get(), max(wait, 0))
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     if loop.time() - start >= timeout:
                         break
                     if loop.time() >= resend_at:
                         break  # Resend.
                     continue
                 if resp is None:
-                    raise e.ConnectionClosedError(
-                        -4013, "Connection closed", "The device endpoint was closed"
+                    raise e.EndpointClosedError(
+                        -4013, "Endpoint closed", "The device endpoint was closed"
                     )
                 resp = self._validate(resp)
                 reply_count = int.from_bytes(resp[0x28:0x2A], "little")
-                if reply_count == count or reply_count not in self._abandoned:
+                if reply_count == count or reply_count not in self._recent:
                     return resp
-                # A late answer to a request we gave up on: keep waiting.
+                _LOGGER.debug(
+                    "%s: dropped a reply for an earlier request (counter 0x%04x)",
+                    self.host[0],
+                    reply_count,
+                )
             if loop.time() - start >= timeout:
-                self._abandoned.append(count)
+                _LOGGER.debug("%s: no reply within %ss", self.host[0], timeout)
                 raise e.NetworkTimeoutError(
                     -4000,
                     "Network timeout",
                     f"No response received within {timeout}s",
                 ) from None
 
-    async def send_packet(
-        self, packet_type: int, payload: bytes, *, _reauth: bool = True
-    ) -> bytes:
+    async def send_packet(self, packet_type: int, payload: bytes) -> bytes:
         """Send a packet to the device and return the raw response frame.
 
         If the device answers that the session key is no longer valid, the
@@ -511,14 +522,12 @@ class Device:
         async with self._lock:
             resp = await self._exchange(self._frame(packet_type, bytes(payload)))
 
-        if _reauth:
-            code = int.from_bytes(resp[0x22:0x24], "little", signed=True)
-            if code in _REAUTH_CODES:
-                async with self._reauth_lock:  # type: ignore[union-attr]
-                    if self._auth_generation == generation:
-                        await self.auth()
-                async with self._lock:
-                    resp = await self._exchange(
-                        self._frame(packet_type, bytes(payload))
-                    )
+        code = int.from_bytes(resp[0x22:0x24], "little", signed=True)
+        if code in _REAUTH_CODES:
+            _LOGGER.debug("%s: device answered %d, re-authenticating", self.host[0], code)
+            async with self._reauth_lock:  # type: ignore[union-attr]
+                if self._auth_generation == generation:
+                    await self.auth()
+            async with self._lock:
+                resp = await self._exchange(self._frame(packet_type, bytes(payload)))
         return resp

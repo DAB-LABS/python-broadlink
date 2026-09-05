@@ -62,7 +62,9 @@ class FakeNet:
 
     async def __call__(self, local_addr=None, remote_addr=None, broadcast=False):
         protocol = device_module._Protocol()
-        transport = FakeTransport(protocol, local_addr, remote_addr, broadcast, self.replies)
+        transport = FakeTransport(
+            protocol, local_addr, remote_addr, broadcast, self.replies
+        )
         self.replies = []
         protocol.connection_made(transport)
         self.endpoints.append(transport)
@@ -262,6 +264,97 @@ def test_late_reply_to_timed_out_request_is_not_taken_as_next_reply(net):
     assert run(go()) == 2
 
 
+def test_second_answer_to_a_resent_request_is_not_taken_as_next_reply(net):
+    """The retry path: a request goes unanswered for a resend interval, is
+    resent with the same counter, and the device answers both copies. The
+    second answer must not be taken as the reply to the next request."""
+    dev = fixed_device()
+
+    async def go():
+        await dev._endpoint()
+        ep = net.endpoints[-1]
+        first = stamped(dev, bytes([1]) + bytes(15), 0x8001)
+        second = stamped(dev, bytes([2]) + bytes(15), 0x8002)
+        sends = {"n": 0}
+
+        def sendto(data, addr=None):
+            ep.sent.append((bytes(data), addr or ep.remote_addr))
+            sends["n"] += 1
+            if sends["n"] == 2:  # The resend of request 1 gets answered...
+                ep.protocol.queue.put_nowait((first, HOST))
+
+        ep.sendto = sendto
+        resp1 = await dev.send_packet(0x6A, b"")  # count 0x8001, answered on resend
+        assert dev.decrypt(resp1[0x38:])[0] == 1
+        assert sends["n"] == 2
+
+        # ...and the original copy's answer shows up while request 2 waits,
+        # followed by request 2's own answer.
+        async def late_then_real():
+            await asyncio.sleep(0.003)
+            ep.protocol.queue.put_nowait((first, HOST))  # duplicate, counter 0x8001
+            await asyncio.sleep(0.003)
+            ep.protocol.queue.put_nowait((second, HOST))
+
+        asyncio.get_running_loop().create_task(late_then_real())
+        resp2 = await dev.send_packet(0x6A, b"")  # count 0x8002
+        return dev.decrypt(resp2[0x38:])[0]
+
+    assert run(go()) == 2
+
+
+def test_auth_never_lets_a_queued_request_out_with_id_zero(net):
+    """A request queued behind the lock while auth() runs must be framed
+    after the new session is installed, never with the initial key and
+    device id 0."""
+    dev = fixed_device()
+    dev.id = 5
+    session_key = bytes.fromhex("00112233445566778899aabbccddeeff")
+    fresh = fixed_device()
+    auth_reply = make_response(fresh, (0x42).to_bytes(4, "little") + session_key)
+    renewed = fixed_device()
+    renewed.update_aes(session_key)
+
+    async def go():
+        await dev._endpoint()
+        ep = net.endpoints[-1]
+        authed = {"done": False}
+
+        loop = asyncio.get_running_loop()
+
+        def sendto(data, addr=None):
+            ep.sent.append((bytes(data), addr or ep.remote_addr))
+            ptype = int.from_bytes(data[0x26:0x28], "little")
+            if ptype == 0x65:
+                authed["done"] = True
+                reply = auth_reply
+            elif not authed["done"]:
+                reply = make_response(dev, b"", error=0xFFF9)  # -7 expired
+            else:
+                reply = make_response(renewed, bytes([7]) + bytes(15))
+            # Answer a little later, like a real device, so the caller
+            # suspends and the second caller queues behind the lock.
+            loop.call_later(0.002, ep.protocol.queue.put_nowait, (reply, ep.remote_addr))
+
+        ep.sendto = sendto
+        a, b = await asyncio.gather(
+            dev.send_packet(0x6A, b"a"), dev.send_packet(0x6A, b"b")
+        )
+        return ep, a, b
+
+    ep, a, b = run(go())
+    ids = [
+        (int.from_bytes(f[0x26:0x28], "little"), int.from_bytes(f[0x30:0x34], "little"))
+        for f, _ in ep.sent
+    ]
+    for ptype, dev_id in ids:
+        if ptype != 0x65:
+            assert dev_id in (5, 0x42), ids
+    assert [p for p, _ in ids].count(0x65) == 1
+    assert dev.decrypt(a[0x38:])[0] == 7
+    assert dev.decrypt(b[0x38:])[0] == 7
+
+
 def test_reply_with_unknown_counter_is_accepted(net):
     """Firmware that does not echo the counter must keep working."""
     dev = fixed_device()
@@ -284,8 +377,10 @@ def test_aclose_fails_inflight_request_fast(net):
         await asyncio.sleep(0.01)
         t0 = asyncio.get_running_loop().time()
         await dev.aclose()
-        with pytest.raises(e.ConnectionClosedError):
+        with pytest.raises(e.EndpointClosedError) as err:
             await task
+        assert isinstance(err.value, e.ConnectionClosedError)
+        assert err.value.errno == -4013
         return asyncio.get_running_loop().time() - t0
 
     assert run(go()) < 1.0
@@ -424,7 +519,9 @@ def test_concurrent_callers_share_one_reauth(net):
             ep.protocol.queue.put_nowait((reply, ep.remote_addr))
 
         ep.sendto = sendto
-        a, b = await asyncio.gather(dev.send_packet(0x6A, b"a"), dev.send_packet(0x6A, b"b"))
+        a, b = await asyncio.gather(
+            dev.send_packet(0x6A, b"a"), dev.send_packet(0x6A, b"b")
+        )
         return ep, {dev.decrypt(a[0x38:])[0], dev.decrypt(b[0x38:])[0]}
 
     ep, values = run(go())

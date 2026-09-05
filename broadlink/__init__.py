@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """The python-broadlink library."""
+
+import contextlib
 from collections.abc import AsyncIterator
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 from . import exceptions as e
 from .alarm import S1C
@@ -223,8 +225,8 @@ SUPPORTED_TYPES = {
 
 def gendevice(
     dev_type: int,
-    host: Tuple[str, int],
-    mac: Union[bytes, str],
+    host: tuple[str, int],
+    mac: bytes | str,
     name: str = "",
     is_locked: bool = False,
 ) -> Device:
@@ -258,12 +260,15 @@ async def hello(
 
     Useful if the device is locked.
     """
-    async for device in xdiscover(
-        timeout=timeout,
-        discover_ip_address=ip_address,
-        discover_ip_port=port,
-    ):
-        return device
+    async with contextlib.aclosing(
+        xdiscover(
+            timeout=timeout,
+            discover_ip_address=ip_address,
+            discover_ip_port=port,
+        )
+    ) as devices:
+        async for device in devices:
+            return device
     raise e.NetworkTimeoutError(
         -4000,
         "Network timeout",
@@ -273,10 +278,10 @@ async def hello(
 
 async def discover(
     timeout: float = DEFAULT_TIMEOUT,
-    local_ip_address: Optional[str] = None,
+    local_ip_address: str | None = None,
     discover_ip_address: str = DEFAULT_BCAST_ADDR,
     discover_ip_port: int = DEFAULT_PORT,
-) -> List[Device]:
+) -> list[Device]:
     """Discover devices connected to the local network."""
     return [
         device
@@ -288,7 +293,7 @@ async def discover(
 
 async def xdiscover(
     timeout: float = DEFAULT_TIMEOUT,
-    local_ip_address: Optional[str] = None,
+    local_ip_address: str | None = None,
     discover_ip_address: str = DEFAULT_BCAST_ADDR,
     discover_ip_port: int = DEFAULT_PORT,
 ) -> AsyncIterator[Device]:

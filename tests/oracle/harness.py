@@ -72,8 +72,7 @@ class Recorder:
         self.sent.append((packet_type, bytes(payload)))
         if not self.responses:
             raise AssertionError(
-                f"method sent more packets than canned responses "
-                f"({len(self.sent)} sent)"
+                f"method sent more packets than canned responses ({len(self.sent)} sent)"
             )
         return make_response(self.device, self.responses.pop(0), self.error)
 
@@ -116,7 +115,7 @@ def run_case(case: dict) -> dict:
 
     responses = [bytes.fromhex(r) for r in case.get("responses", [])]
     recorder = Recorder(device, responses, case.get("error_code", 0))
-    target = getattr(device, "send_packet")
+    target = device.send_packet
     if inspect.iscoroutinefunction(target):
         device.send_packet = recorder.async_call  # type: ignore[method-assign]
     else:
@@ -132,7 +131,7 @@ def run_case(case: dict) -> dict:
         if inspect.isawaitable(result):
             result = asyncio.run(_await(result))
         outcome["result"] = normalize(result)
-    except Exception as err:  # noqa: BLE001 - the error type IS the oracle
+    except Exception as err:
         outcome["error"] = f"{type(err).__name__}: {err}"
 
     outcome["sent"] = [[ptype, payload.hex()] for ptype, payload in recorder.sent]

@@ -1,5 +1,6 @@
 """Helper functions and classes."""
-from typing import Dict, List, Sequence
+
+from collections.abc import Sequence
 
 
 class CRC16:
@@ -8,10 +9,10 @@ class CRC16:
     CRC tables are cached for performance.
     """
 
-    _cache: Dict[int, List[int]] = {}
+    _cache: dict[int, list[int]] = {}
 
     @classmethod
-    def get_table(cls, polynomial: int) -> List[int]:
+    def get_table(cls, polynomial: int) -> list[int]:
         """Return the CRC-16 table for a polynomial."""
         try:
             crc_table = cls._cache[polynomial]

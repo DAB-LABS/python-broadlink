@@ -1,4 +1,5 @@
 """Support for alarm kits."""
+
 from . import exceptions as e
 from .device import Device
 

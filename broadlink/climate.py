@@ -1,7 +1,8 @@
 """Support for climate control."""
+
 import enum
 import struct
-from typing import List, Sequence
+from collections.abc import Sequence
 
 from . import exceptions as e
 from .device import Device
@@ -33,7 +34,7 @@ class hysen(Device):
         payload = self.decrypt(response[0x38:])
 
         p_len = int.from_bytes(payload[:0x02], "little")
-        nom_crc = int.from_bytes(payload[p_len:p_len+2], "little")
+        nom_crc = int.from_bytes(payload[p_len : p_len + 2], "little")
         real_crc = CRC16.calculate(payload[0x02:p_len])
 
         if nom_crc != real_crc:
@@ -83,9 +84,7 @@ class hysen(Device):
         data["dif"] = payload[10]
         data["svh"] = payload[11]
         data["svl"] = payload[12]
-        data["room_temp_adj"] = (
-            int.from_bytes(payload[13:15], "big", signed=True) / 10.0
-        )
+        data["room_temp_adj"] = int.from_bytes(payload[13:15], "big", signed=True) / 10.0
         data["fre"] = payload[15]
         data["poweron"] = payload[16]
         data["unknown"] = payload[17]
@@ -127,9 +126,7 @@ class hysen(Device):
     # E.g. loop_mode = 0 ("12345,67") means Saturday and Sunday (weekend schedule)
     # loop_mode = 2 ("1234567") means every day, including Saturday and Sunday (weekday schedule)
     # The sensor command is currently experimental
-    async def set_mode(
-        self, auto_mode: int, loop_mode: int, sensor: int = 0
-    ) -> None:
+    async def set_mode(self, auto_mode: int, loop_mode: int, sensor: int = 0) -> None:
         """Set the mode of the device."""
         mode_byte = ((loop_mode + 1) << 4) + auto_mode
         await self.send_request([0x01, 0x06, 0x00, 0x02, mode_byte, sensor])
@@ -210,19 +207,7 @@ class hysen(Device):
     async def set_time(self, hour: int, minute: int, second: int, day: int) -> None:
         """Set the time."""
         await self.send_request(
-            [
-                0x01,
-                0x10,
-                0x00,
-                0x08,
-                0x00,
-                0x02,
-                0x04,
-                hour,
-                minute,
-                second,
-                day
-            ]
+            [0x01, 0x10, 0x00, 0x08, 0x00, 0x02, 0x04, hour, minute, second, day]
         )
 
     # Set timer schedule
@@ -231,7 +216,7 @@ class hysen(Device):
     # {'start_hour':17, 'start_minute':30, 'temp': 22 }
     # Each one specifies the thermostat temp that will become effective at start_hour:start_minute
     # weekend is similar but only has 2 (e.g. switch on in morning and off in afternoon)
-    async def set_schedule(self, weekday: List[dict], weekend: List[dict]) -> None:
+    async def set_schedule(self, weekday: list[dict], weekend: list[dict]) -> None:
         """Set timer schedule."""
         request = [0x01, 0x10, 0x00, 0x0A, 0x00, 0x0C, 0x18]
 
@@ -317,9 +302,7 @@ class hvac(Device):
         """Encode data for transport."""
         packet = bytearray(10)
         p_len = 10 + len(data)
-        struct.pack_into(
-            "<HHHHH", packet, 0, p_len, 0x00BB, 0x8006, 0, len(data)
-        )
+        struct.pack_into("<HHHHH", packet, 0, p_len, 0x00BB, 0x8006, 0, len(data))
         packet += data
         crc = CRC16.calculate(packet[0x02:], polynomial=0x9BE4)
         packet += crc.to_bytes(2, "little")
@@ -330,7 +313,7 @@ class hvac(Device):
         # payload[0x2:0x8] == bytes([0xbb, 0x00, 0x07, 0x00, 0x00, 0x00])
         payload = self.decrypt(response[0x38:])
         p_len = int.from_bytes(payload[:0x02], "little")
-        nom_crc = int.from_bytes(payload[p_len:p_len+2], "little")
+        nom_crc = int.from_bytes(payload[p_len : p_len + 2], "little")
         real_crc = CRC16.calculate(payload[0x02:p_len], polynomial=0x9BE4)
 
         if nom_crc != real_crc:
@@ -341,7 +324,7 @@ class hvac(Device):
             )
 
         d_len = int.from_bytes(payload[0x08:0x0A], "little")
-        return payload[0x0A:0x0A+d_len]
+        return payload[0x0A : 0x0A + d_len]
 
     async def _send(self, command: int, data: bytes = b"") -> bytes:
         """Send a command to the unit."""

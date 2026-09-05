@@ -1,7 +1,7 @@
 """Support for switches."""
+
 import json
 import struct
-from typing import Optional
 
 from . import exceptions as e
 from .device import Device
@@ -128,12 +128,12 @@ class sp4(Device):
 
     async def set_state(
         self,
-        pwr: Optional[bool] = None,
-        ntlight: Optional[bool] = None,
-        indicator: Optional[bool] = None,
-        ntlbrightness: Optional[int] = None,
-        maxworktime: Optional[int] = None,
-        childlock: Optional[bool] = None,
+        pwr: bool | None = None,
+        ntlight: bool | None = None,
+        indicator: bool | None = None,
+        ntlbrightness: int | None = None,
+        maxworktime: int | None = None,
+        childlock: bool | None = None,
     ) -> dict:
         """Set state of device."""
         state = {}
@@ -187,7 +187,7 @@ class sp4(Device):
         e.check_error(response[0x22:0x24])
         payload = self.decrypt(response[0x38:])
         js_len = struct.unpack_from("<I", payload, 0x08)[0]
-        state = json.loads(payload[0x0C:0x0C+js_len])
+        state = json.loads(payload[0x0C : 0x0C + js_len])
         return state
 
 
@@ -235,7 +235,7 @@ class sp4b(sp4):
         e.check_error(response[0x22:0x24])
         payload = self.decrypt(response[0x38:])
         js_len = struct.unpack_from("<I", payload, 0xA)[0]
-        state = json.loads(payload[0x0E:0x0E+js_len])
+        state = json.loads(payload[0x0E : 0x0E + js_len])
         return state
 
 
@@ -256,13 +256,13 @@ class bg1(Device):
 
     async def set_state(
         self,
-        pwr: Optional[bool] = None,
-        pwr1: Optional[bool] = None,
-        pwr2: Optional[bool] = None,
-        maxworktime: Optional[int] = None,
-        maxworktime1: Optional[int] = None,
-        maxworktime2: Optional[int] = None,
-        idcbrightness: Optional[int] = None,
+        pwr: bool | None = None,
+        pwr1: bool | None = None,
+        pwr2: bool | None = None,
+        maxworktime: int | None = None,
+        maxworktime1: int | None = None,
+        maxworktime2: int | None = None,
+        idcbrightness: int | None = None,
     ) -> dict:
         """Set the power state of the device."""
         state = {}
@@ -312,7 +312,7 @@ class bg1(Device):
         """Decode a message."""
         payload = self.decrypt(response[0x38:])
         js_len = struct.unpack_from("<I", payload, 0x0A)[0]
-        state = json.loads(payload[0x0E:0x0E+js_len])
+        state = json.loads(payload[0x0E : 0x0E + js_len])
         return state
 
 
@@ -323,19 +323,19 @@ class ehc31(bg1):
 
     async def set_state(
         self,
-        pwr: Optional[bool] = None,
-        pwr1: Optional[bool] = None,
-        pwr2: Optional[bool] = None,
-        pwr3: Optional[bool] = None,
-        maxworktime1: Optional[int] = None,
-        maxworktime2: Optional[int] = None,
-        maxworktime3: Optional[int] = None,
-        idcbrightness: Optional[int] = None,
-        childlock: Optional[bool] = None,
-        childlock1: Optional[bool] = None,
-        childlock2: Optional[bool] = None,
-        childlock3: Optional[bool] = None,
-        childlock4: Optional[bool] = None,
+        pwr: bool | None = None,
+        pwr1: bool | None = None,
+        pwr2: bool | None = None,
+        pwr3: bool | None = None,
+        maxworktime1: int | None = None,
+        maxworktime2: int | None = None,
+        maxworktime3: int | None = None,
+        idcbrightness: int | None = None,
+        childlock: bool | None = None,
+        childlock1: bool | None = None,
+        childlock2: bool | None = None,
+        childlock3: bool | None = None,
+        childlock4: bool | None = None,
     ) -> dict:
         """Set the power state of the device."""
         state = {}
@@ -459,8 +459,8 @@ class mp1s(mp1):
 
         def get_value(start, end, factors):
             value = sum(
-                int(payload_str[i-2:i]) * factor
-                for i, factor in zip(range(start, end, -2), factors)
+                int(payload_str[i - 2 : i]) * factor
+                for i, factor in zip(range(start, end, -2), factors, strict=False)
             )
             return value
 

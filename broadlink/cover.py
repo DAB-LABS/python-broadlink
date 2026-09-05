@@ -1,6 +1,7 @@
 """Support for covers."""
+
 import asyncio
-from typing import Sequence
+from collections.abc import Sequence
 
 from . import exceptions as e
 from .device import Device

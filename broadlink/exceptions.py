@@ -1,4 +1,5 @@
 """Exceptions for Broadlink devices."""
+
 import collections
 import struct
 
@@ -22,7 +23,7 @@ class BroadlinkException(Exception):
     def __str__(self):
         """Return str(self)."""
         if self.errno is not None:
-            return "[Errno %s] %s" % (self.errno, self.strerror)
+            return f"[Errno {self.errno}] {self.strerror}"
         return self.strerror
 
     def __eq__(self, other):
@@ -42,13 +43,13 @@ class MultipleErrors(BroadlinkException):
         """Initialize the exception."""
         errors = args[0][:] if args else []
         counter = collections.Counter(errors)
-        strerror = "Multiple errors occurred: %s" % counter
+        strerror = f"Multiple errors occurred: {counter}"
         super().__init__(strerror, **kwargs)
         self.errors = errors
 
     def __repr__(self):
         """Return repr(self)."""
-        return "MultipleErrors(%r)" % self.errors
+        return f"MultipleErrors({self.errors!r})"
 
     def __str__(self):
         """Return str(self)."""
@@ -69,6 +70,16 @@ class CommandNotSupportedError(BroadlinkException):
 
 class ConnectionClosedError(BroadlinkException):
     """Connection closed error."""
+
+
+class EndpointClosedError(ConnectionClosedError):
+    """The library's own endpoint was closed while a request was in flight.
+
+    Raised locally by ``Device.aclose()``, not by the device. It is a
+    subclass of ``ConnectionClosedError`` so existing handlers still catch
+    it, and a distinct class so a caller that closed the device on purpose
+    can tell it apart from the device's "logged out" (-2) answer.
+    """
 
 
 class StructureAbnormalError(BroadlinkException):
@@ -142,6 +153,7 @@ BROADLINK_EXCEPTIONS = {
     -4010: (DataValidationError, "Received encrypted data packet length error"),
     -4011: (DataValidationError, "Received encrypted data packet check error"),
     -4012: (AuthorizationError, "Device control ID error"),
+    -4013: (EndpointClosedError, "Endpoint closed"),
 }
 
 
