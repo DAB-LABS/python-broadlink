@@ -3,6 +3,51 @@
 All notable changes to this project are recorded here. The format follows
 Keep a Changelog; versions follow Semantic Versioning.
 
+## 1.0.1 - 2026-09-05
+
+Fixes from an independent review of 1.0.0, most of them in the transport.
+None changes the wire format or the public API.
+
+### Fixed
+
+- A reply to a request that had already timed out could be delivered as the
+  reply to the next request on the same device, because the persistent
+  endpoint (new in 1.0.0) is not thrown away between calls the way the old
+  per-call socket was. Replies are now matched to their request by the
+  packet counter the device echoes at offset 0x28; a reply carrying the
+  counter of a request that already timed out is discarded, and a reply
+  whose counter matches nothing the device sent is still accepted, so
+  firmware that does not echo the counter is unaffected. Confirmed on an
+  RM4 Pro, which echoes it.
+- `capture()` treated only `StorageError` (-5) as "nothing captured yet".
+  Some firmware answers `ReadError` (-10); both are now treated as "nothing
+  yet", matching what the original CLI and Home Assistant do while polling.
+  The CLI's `--learn` and `--rflearn` inherit the fix.
+- Abandoning a capture generator without closing it (for example `break`
+  out of `async for` to take one code) no longer blocks the next
+  `capture()` on the same device: opening a new window closes an abandoned
+  one. Opening a window while another is actively being iterated still
+  raises `CaptureInProgressError`. A new read-only `Device.capture_active`
+  property reports whether a window is open.
+- Re-authentication is now shared between concurrent callers: when several
+  requests hit an expired session key at once, the library authenticates
+  once and every caller retries, instead of one caller re-authenticating
+  and the others surfacing the raw error. The logged-out code (-2) now
+  triggers re-authentication as well, matching Home Assistant's own retry.
+- Changing `device.host` after the endpoint is open now reopens it against
+  the new address instead of continuing to talk to the old one.
+- `aclose()` while a request is in flight fails that request at once with
+  `ConnectionClosedError` instead of waiting out the timeout.
+
+### Documentation
+
+- The README explains that `broadlink` and `python-broadlink` install the
+  same package name and cannot coexist, and how to recover if both were
+  installed.
+- The changelog no longer describes the carried-over device commits as
+  "intact" (they were squash-merged with `Co-authored-by` credit) and no
+  longer overstates what the oracle records.
+
 ## 1.0.0 - 2026-09-05
 
 This is the first release of `python-broadlink`, a maintained fork of
@@ -39,6 +84,8 @@ history below starts at that fork point.
   #830).
 - `pulses_to_data` returns `bytes` (it returned a `bytearray`, against its
   own annotation).
+- The device's request lock is now a private `_lock` that is actually
+  acquired; the unused public `Device.lock` attribute is gone.
 - Packaging moved to `pyproject.toml`; `setup.py` and the stale
   `requirements.txt` pin are gone. The distribution name is now
   `python-broadlink`; the import name stays `broadlink`. Python 3.13 or
@@ -80,7 +127,8 @@ history below starts at that fork point.
   read by band and a capture is tagged from what it armed rather than the
   byte.
 - Devices, carried over from pull requests against the original repository
-  with their authors' commits intact: RM Max 0xAF8B (#838, Alexey Masolov);
+  with their authors credited (the changes were squash-merged with
+  `Co-authored-by` trailers naming each author): RM Max 0xAF8B (#838, Alexey Masolov);
   RM5 plus 0x5224 with a new `rm5plus` class (#831, Anil Daoud); RM mini 3
   OEM 0xA544 (#823, Bartłomiej Nogaś); RM mini 3 CMCC 0x27C8 (#802,
   shuxin); LB26 R1 0xA517 (#812, techitapart); SP mini 3-AL 0x7D15 (#805,
@@ -92,7 +140,9 @@ history below starts at that fork point.
   issue if either does not behave.
 - `cryptography` 43 or newer is required, the first release with wheels for
   Python 3.13 (supersedes mjg59/python-broadlink#749).
-- A test suite. The `tests/oracle` package records the exact request bytes
-  every public method of every device class sends, and the results it
-  decodes from canned responses, so that later changes to the transport
-  can be checked byte for byte against the original behavior.
+- A test suite. The `tests/oracle` package records, for every public method
+  of every device class, the request each one hands to the transport (its
+  packet type and plaintext payload) and the result it decodes from a canned
+  response, so that a later reimplementation can be checked against the
+  original method by method; the framing, encryption and checksum layer is
+  covered separately by `tests/test_transport.py`.
