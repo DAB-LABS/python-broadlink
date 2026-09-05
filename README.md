@@ -16,9 +16,12 @@ A Python module and CLI for controlling Broadlink devices locally.
 
 ## Version 1.0 is asynchronous
 
-Every call that reaches a device is a coroutine and must be awaited. This
-is the whole change from the original library's API; method names,
-arguments and return values are the same.
+Every call that reaches a device is a coroutine and must be awaited. That
+is the main change from the original library's API: method names and
+arguments are the same, and so are return values, with the small
+exceptions listed in `CHANGELOG.md` (the IR tick constant, `pulses_to_data`
+returning `bytes`, the unused `Device.lock` attribute removed, and
+`timeout` parameters typed as floats).
 
 ```python
 import asyncio
@@ -52,7 +55,31 @@ The following devices are supported:
 - **Thermostats**: Hysen HY02B05H
 - **Hubs**: S3
 
+## Timing
+
+The original library converted microseconds to the device's timing units
+with the constant 32.84, which is the right ratio applied the wrong way
+round, and it shortened every IR code built from microsecond timings by
+about 7 percent. Codes learned from a remote and replayed through the same
+device were never affected, which is why it went unnoticed for years.
+Version 1.0 uses 8192/269 (about 30.45 us per unit), the value implied by
+`protocol.md`, and rounds to the nearest unit instead of truncating.
+
+Measured on an RM4 Pro against an independent receiver, the same NEC frame
+packed with the old constant arrived 5.4 percent short of its intended
+length; packed with the corrected constant it arrived 0.6 percent short,
+twice, thirteen hours apart, within 22 us of itself. Packets learned by
+the device and replayed by name are unchanged. Anything that stores
+microsecond timings produced by the old `data_to_pulses` (which reported
+them about 7.8 percent long) and re-encodes them with the new
+`pulses_to_data` will lengthen by that amount; store the device packet
+instead, as `CapturedSignal.packet` does.
+
 ## Installation
+
+Python 3.13 or newer. That is a support decision rather than a technical
+one: the code runs on 3.11, but the versions tested in CI are 3.13 and
+3.14 and those are the ones Home Assistant ships.
 
 Use pip3 to install the latest version of this module.
 
@@ -144,6 +171,27 @@ After discovering the device, call the `auth()` method to obtain the authenticat
 await device.auth()
 ```
 
+### Closing
+
+Each device keeps one UDP socket open for its lifetime (the original
+library opened a new one for every call). Close it when you are done with
+the device, either with the context manager or explicitly:
+
+```python3
+async with device:
+    await device.auth()
+    print(await device.check_sensors())
+
+# or
+await device.aclose()
+```
+
+The socket reopens by itself on the next call, so closing is cheap and
+safe to do at any time. A request that is in flight when `aclose()` runs
+fails with `EndpointClosedError`. An integration that creates devices
+should close them when it unloads; a device that is never closed holds
+its socket until it is garbage collected.
+
 The next steps depend on the type of device you want to control.
 
 ## Universal remotes
@@ -217,10 +265,13 @@ By default the window closes after the first signal. Pass
 `window=0` runs until the generator is closed), re-arming after each signal
 because the device holds only one code per learning session. A universal
 remote has a single receiver, so only one capture window can be open on a
-device at a time.
+device at a time: opening a second one raises `CaptureInProgressError`
+while the first is still held. Always close a window you leave early
+(`aclosing` above does it), otherwise it stays open until Python collects
+the generator.
 
 `CapturedSignal` carries the device's own `packet` bytes (ready for
-`send_data`), the decoded `pulses` in microseconds at the correct tick, the
+`send_data`), the decoded `pulses` in microseconds at the corrected tick, the
 `kind` (`SignalKind.IR`, `RF_433` or `RF_315`), the `repeat` count, and for
 RF the `frequency_mhz` the packet itself does not record.
 

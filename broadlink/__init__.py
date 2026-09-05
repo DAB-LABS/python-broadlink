@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """The python-broadlink library."""
+import contextlib
 from collections.abc import AsyncIterator
 from typing import List, Optional, Tuple, Union
 
@@ -258,12 +259,15 @@ async def hello(
 
     Useful if the device is locked.
     """
-    async for device in xdiscover(
-        timeout=timeout,
-        discover_ip_address=ip_address,
-        discover_ip_port=port,
-    ):
-        return device
+    async with contextlib.aclosing(
+        xdiscover(
+            timeout=timeout,
+            discover_ip_address=ip_address,
+            discover_ip_port=port,
+        )
+    ) as devices:
+        async for device in devices:
+            return device
     raise e.NetworkTimeoutError(
         -4000,
         "Network timeout",

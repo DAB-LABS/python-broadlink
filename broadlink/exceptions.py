@@ -71,6 +71,16 @@ class ConnectionClosedError(BroadlinkException):
     """Connection closed error."""
 
 
+class EndpointClosedError(ConnectionClosedError):
+    """The library's own endpoint was closed while a request was in flight.
+
+    Raised locally by ``Device.aclose()``, not by the device. It is a
+    subclass of ``ConnectionClosedError`` so existing handlers still catch
+    it, and a distinct class so a caller that closed the device on purpose
+    can tell it apart from the device's "logged out" (-2) answer.
+    """
+
+
 class StructureAbnormalError(BroadlinkException):
     """Structure abnormal error."""
 
@@ -142,6 +152,7 @@ BROADLINK_EXCEPTIONS = {
     -4010: (DataValidationError, "Received encrypted data packet length error"),
     -4011: (DataValidationError, "Received encrypted data packet check error"),
     -4012: (AuthorizationError, "Device control ID error"),
+    -4013: (EndpointClosedError, "Endpoint closed"),
 }
 
 

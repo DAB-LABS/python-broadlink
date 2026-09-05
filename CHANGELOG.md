@@ -3,6 +3,58 @@
 All notable changes to this project are recorded here. The format follows
 Keep a Changelog; versions follow Semantic Versioning.
 
+## 1.0.2 - 2026-09-05
+
+Fixes from a second, adversarial review of 1.0.1 and a re-test of the
+first review's findings. No change to the wire format or the public API.
+
+### Fixed
+
+- 1.0.1's reply matching dropped a late reply to a request that had
+  timed out, but not the second reply to a request that was resent after a
+  silent second and then answered twice. That duplicate carries the counter
+  of a request that succeeded, and it could still be taken as the answer
+  to the next request. The library now remembers every recently used
+  counter and drops any reply carrying one other than the current
+  request's. A reply whose counter the device has not used recently is
+  still accepted, for firmware that may not echo it.
+- `auth()` reset the session id and key before taking the request lock, so
+  a request already queued behind the lock could be framed with device id
+  0 and the initial key. The reset, the exchange and the install of the
+  new key now happen as one unit under the lock.
+- 1.0.1 let a new capture window close one that a consumer had abandoned,
+  using "is the generator running right now" as the test. That cannot
+  tell an abandoned window from one whose consumer is awaiting something
+  between signals, which the README's own example does. A new window now
+  gives asyncio's finalizer one turn to close a genuinely dropped
+  generator and then refuses if the old window is still alive, rather
+  than taking it. A refused attempt no longer displaces the live window.
+- A packet the device returned that cannot be decoded (a declared length
+  running into a truncated escape) no longer ends the capture window; it
+  is logged and the window re-arms.
+- `aclose()` during a request now raises `EndpointClosedError`, a subclass
+  of `ConnectionClosedError` with code -4013 in the error table, so a
+  caller that closed the device on purpose can tell that apart from the
+  device's own "logged out" answer.
+- `hello()` closes the discovery generator it breaks out of instead of
+  leaving the socket to the finalizer; `asyncio.TimeoutError` is spelled
+  `TimeoutError`; an unused future on the protocol object is gone.
+
+### Added
+
+- Debug logging on the `broadlink.device` and `broadlink.remote` loggers:
+  endpoint open and close, resends, dropped late replies, timeouts,
+  re-authentication, capture arm and re-arm, captured packets.
+- README: a "Closing" section on the persistent socket, a "Timing" section
+  with the bench measurement of the tick fix (5.4 percent short before,
+  0.6 percent short after, on an RM4 Pro against an independent
+  receiver), a note that Python 3.13 is a support decision, and the short
+  list of return-value differences from 0.19.0.
+
+### Changed
+
+- The code is formatted with `ruff format` and CI checks it.
+
 ## 1.0.1 - 2026-09-05
 
 Fixes from an independent review of 1.0.0, most of them in the transport.
