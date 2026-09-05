@@ -1,4 +1,5 @@
 """Tests for the tick constant used by pulses_to_data / data_to_pulses (GH #839)."""
+
 import unittest
 
 from broadlink.remote import TICK, data_to_pulses, pulses_to_data
@@ -34,7 +35,7 @@ class TestTickConstant(unittest.TestCase):
         pulses = [9000, 4500, 560, 1690, 560, 560]
         packet = pulses_to_data(pulses)
         decoded = data_to_pulses(packet)
-        for original, result in zip(pulses, decoded):
+        for original, result in zip(pulses, decoded, strict=True):
             self.assertAlmostEqual(result, original, delta=TICK)
 
     def test_true_microsecond_nec_leader_is_now_correct(self):

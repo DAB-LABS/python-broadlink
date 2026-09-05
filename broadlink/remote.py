@@ -6,8 +6,8 @@ import logging
 import struct
 import time
 import weakref
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import AsyncIterator, Awaitable, Callable, List, Optional, Tuple
 
 from . import exceptions as e
 from .device import Device
@@ -74,7 +74,7 @@ class SignalKind(enum.IntEnum):
 
 
 def pulses_to_data(
-    pulses: List[int],
+    pulses: list[int],
     tick: float = TICK,
     *,
     kind: SignalKind = SignalKind.IR,
@@ -106,7 +106,7 @@ def pulses_to_data(
     return bytes(result)
 
 
-def data_to_pulses(data: bytes, tick: float = TICK) -> List[int]:
+def data_to_pulses(data: bytes, tick: float = TICK) -> list[int]:
     """Parse a Broadlink packet into a microsecond duration sequence."""
     result = []
     index = 4
@@ -139,7 +139,7 @@ class ParsedPacket:
 
     kind: SignalKind
     repeat: int
-    pulses: List[int]
+    pulses: list[int]
     type_byte: int
 
 
@@ -170,19 +170,19 @@ class CapturedSignal:
 
     packet: bytes
     kind: SignalKind
-    pulses: List[int] = field(repr=False)
+    pulses: list[int] = field(repr=False)
     repeat: int = 0
-    frequency_mhz: Optional[float] = None
-    type_byte: Optional[int] = None
+    frequency_mhz: float | None = None
+    type_byte: int | None = None
     captured_at: float = field(default_factory=time.time, repr=False)
 
     @classmethod
     def from_packet(
         cls,
         packet: bytes,
-        frequency_mhz: Optional[float] = None,
+        frequency_mhz: float | None = None,
         *,
-        kind: Optional[SignalKind] = None,
+        kind: SignalKind | None = None,
     ) -> "CapturedSignal":
         """Build a signal from a device-returned packet.
 
@@ -220,7 +220,7 @@ class rmmini(Device):
         self._tx_generation = 0
         # Weak reference to the async generator of the current capture
         # window, if any. See _claim_window.
-        self._window: Optional[weakref.ReferenceType] = None
+        self._window: weakref.ReferenceType | None = None
 
     @property
     def capture_active(self) -> bool:
@@ -340,9 +340,9 @@ class rmmini(Device):
         poll_interval: float,
         rearm_interval: float,
         kind: SignalKind,
-        frequency_mhz: Optional[float],
+        frequency_mhz: float | None,
         *,
-        claim: Optional[list] = None,
+        claim: list | None = None,
     ) -> AsyncIterator[CapturedSignal]:
         # ``claim`` carries a weak reference to this generator (filled in by
         # the caller after creating it); None means the caller owns the
@@ -426,14 +426,14 @@ class rmpro(rmmini):
         """Sweep frequency."""
         await self._send(0x19)
 
-    async def check_frequency(self) -> Tuple[bool, float]:
+    async def check_frequency(self) -> tuple[bool, float]:
         """Return True if the frequency was identified successfully."""
         resp = await self._send(0x1A)
         is_found = bool(resp[0])
         frequency = struct.unpack("<I", resp[1:5])[0] / 1000.0
         return is_found, frequency
 
-    async def find_rf_packet(self, frequency: Optional[float] = None) -> None:
+    async def find_rf_packet(self, frequency: float | None = None) -> None:
         """Enter radiofrequency learning mode."""
         payload = bytearray()
         if frequency:
@@ -448,7 +448,7 @@ class rmpro(rmmini):
         self,
         window: float = 30.0,
         *,
-        frequency: Optional[float] = None,
+        frequency: float | None = None,
         stop_after_first: bool = True,
         poll_interval: float = DEFAULT_POLL_INTERVAL,
         rearm_interval: float = DEFAULT_REARM_INTERVAL,
@@ -472,7 +472,11 @@ class rmpro(rmmini):
         self._check_window()
         holder: list = []
         gen = self._capture_rf_loop(
-            window, frequency, stop_after_first, poll_interval, rearm_interval,
+            window,
+            frequency,
+            stop_after_first,
+            poll_interval,
+            rearm_interval,
             claim=holder,
         )
         holder.append(weakref.ref(gen))
@@ -481,7 +485,7 @@ class rmpro(rmmini):
     async def _capture_rf_loop(
         self,
         window: float,
-        frequency: Optional[float],
+        frequency: float | None,
         stop_after_first: bool,
         poll_interval: float,
         rearm_interval: float,
@@ -509,7 +513,13 @@ class rmpro(rmmini):
 
         kind = SignalKind.RF_315 if frequency < 400 else SignalKind.RF_433
         inner = self._capture_loop(
-            arm, window, stop_after_first, poll_interval, rearm_interval, kind, frequency,
+            arm,
+            window,
+            stop_after_first,
+            poll_interval,
+            rearm_interval,
+            kind,
+            frequency,
             claim=None,
         )
         try:
@@ -518,9 +528,7 @@ class rmpro(rmmini):
         finally:
             await inner.aclose()
 
-    async def _sweep(
-        self, deadline: Optional[float], poll_interval: float
-    ) -> Optional[float]:
+    async def _sweep(self, deadline: float | None, poll_interval: float) -> float | None:
         """Sweep for the remote's carrier; return it in MHz, or None if the
         window ran out first."""
         loop = asyncio.get_running_loop()
@@ -566,7 +574,7 @@ class rmminib(rmmini):
         e.check_error(resp[0x22:0x24])
         payload = self.decrypt(resp[0x38:])
         p_len = struct.unpack("<H", payload[:0x2])[0]
-        return payload[0x6:p_len+2]
+        return payload[0x6 : p_len + 2]
 
 
 class rm4mini(rmminib):

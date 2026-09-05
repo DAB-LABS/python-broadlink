@@ -111,7 +111,9 @@ class FakeRM:
             self.sweeping = False
             return b"", 0
         if command == CMD_CHECK_FREQ:
-            found, freq = self.sweep_answers.pop(0) if self.sweep_answers else (False, 0.0)
+            found, freq = (
+                self.sweep_answers.pop(0) if self.sweep_answers else (False, 0.0)
+            )
             return bytes([found]) + struct.pack("<I", int(freq * 1000)), 0
         raise AssertionError(f"unexpected command 0x{command:02x}")
 
@@ -119,7 +121,9 @@ class FakeRM:
         return sum(1 for c, _ in self.commands if c == command)
 
 
-def make(cls_name: str = "rm4pro", devtype: int = 0x649B) -> tuple[broadlink.Device, FakeRM]:
+def make(
+    cls_name: str = "rm4pro", devtype: int = 0x649B
+) -> tuple[broadlink.Device, FakeRM]:
     cls = getattr(broadlink, cls_name)
     device = cls(HOST, MAC, devtype, name="Bench", model="Test", manufacturer="Test")
     framing = "rmmini" if cls_name in {"rmmini", "rmpro", "rm"} else "rmminib"
@@ -146,8 +150,10 @@ FAST = dict(poll_interval=UNIT, rearm_interval=10.0)
 # ------------------------------------------------------------- IR windows
 
 
-@pytest.mark.parametrize("cls_name,devtype", [("rm4pro", 0x649B), ("rmpro", 0x272A),
-                                               ("rm4mini", 0x51DA), ("rm5plus", 0x5224)])
+@pytest.mark.parametrize(
+    "cls_name,devtype",
+    [("rm4pro", 0x649B), ("rmpro", 0x272A), ("rm4mini", 0x51DA), ("rm5plus", 0x5224)],
+)
 def test_capture_yields_first_signal_and_closes(cls_name, devtype):
     device, fake = make(cls_name, devtype)
 
@@ -190,7 +196,12 @@ def test_capture_keeps_going_and_rearms_after_each_code():
         loop = asyncio.get_running_loop()
         loop.create_task(press_later(fake, IR, 2 * UNIT))
         loop.create_task(press_later(fake, RF, 6 * UNIT))
-        return [s async for s in device.capture(window=12 * UNIT, stop_after_first=False, **FAST)]
+        return [
+            s
+            async for s in device.capture(
+                window=12 * UNIT, stop_after_first=False, **FAST
+            )
+        ]
 
     signals = run(go())
     assert [s.packet for s in signals] == [IR, RF]
@@ -215,7 +226,12 @@ def test_press_between_code_and_rearm_is_lost_but_next_is_not():
             results.append(fake.press(RF))  # Re-armed by then.
 
         loop.create_task(presses())
-        signals = [s async for s in device.capture(window=10 * UNIT, stop_after_first=False, **FAST)]
+        signals = [
+            s
+            async for s in device.capture(
+                window=10 * UNIT, stop_after_first=False, **FAST
+            )
+        ]
         return results, signals
 
     results, signals = run(go())
@@ -263,7 +279,10 @@ def test_timed_rearm_recovers_from_silent_expiry():
         loop = asyncio.get_running_loop()
         task = loop.create_task(expire_then_press())
         signals = [
-            s async for s in device.capture(window=30 * UNIT, poll_interval=1 * UNIT, rearm_interval=4 * UNIT)
+            s
+            async for s in device.capture(
+                window=30 * UNIT, poll_interval=1 * UNIT, rearm_interval=4 * UNIT
+            )
         ]
         return await task, signals
 
@@ -278,7 +297,9 @@ def test_open_ended_window_runs_until_closed():
 
     async def go():
         got = []
-        async with aclosing(device.capture(window=0, stop_after_first=False, **FAST)) as gen:
+        async with aclosing(
+            device.capture(window=0, stop_after_first=False, **FAST)
+        ) as gen:
             asyncio.get_running_loop().create_task(press_later(fake, IR, 2 * UNIT))
             async for s in gen:
                 got.append(s)
@@ -294,7 +315,7 @@ def test_open_ended_window_runs_until_closed():
 
 
 def test_second_window_is_refused():
-    device, fake = make()
+    device, _fake = make()
 
     async def go():
         task = asyncio.get_running_loop().create_task(
@@ -588,7 +609,7 @@ def test_send_during_sweep_restarts_it():
 
 
 def test_capture_rf_refused_while_ir_window_open():
-    device, fake = make()
+    device, _fake = make()
 
     async def go():
         task = asyncio.get_running_loop().create_task(

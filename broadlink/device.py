@@ -16,7 +16,6 @@ import logging
 import random
 import socket
 from collections.abc import AsyncIterator
-from typing import Optional, Tuple, Union
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -32,7 +31,7 @@ from .protocol import Datetime
 
 _LOGGER = logging.getLogger(__name__)
 
-HelloResponse = Tuple[int, Tuple[str, int], bytes, str, bool]
+HelloResponse = tuple[int, tuple[str, int], bytes, str, bool]
 
 # Device error codes that mean the session key is no longer accepted and a
 # fresh auth() will fix it. -2: logged out; -7: control key expired;
@@ -55,7 +54,7 @@ class _Protocol(asyncio.DatagramProtocol):
 
     def __init__(self) -> None:
         self.queue: asyncio.Queue[tuple[bytes, tuple[str, int]]] = asyncio.Queue()
-        self.transport: Optional[asyncio.DatagramTransport] = None
+        self.transport: asyncio.DatagramTransport | None = None
 
     def connection_made(self, transport) -> None:  # type: ignore[override]
         self.transport = transport
@@ -68,7 +67,7 @@ class _Protocol(asyncio.DatagramProtocol):
         # the retry loop will time out and raise NetworkTimeoutError.
         pass
 
-    def connection_lost(self, exc: Optional[Exception]) -> None:
+    def connection_lost(self, exc: Exception | None) -> None:
         pass
 
     def drain(self) -> None:
@@ -78,8 +77,8 @@ class _Protocol(asyncio.DatagramProtocol):
 
 
 async def _open_endpoint(
-    local_addr: Optional[tuple[str, int]] = None,
-    remote_addr: Optional[tuple[str, int]] = None,
+    local_addr: tuple[str, int] | None = None,
+    remote_addr: tuple[str, int] | None = None,
     broadcast: bool = False,
 ) -> tuple[asyncio.DatagramTransport, _Protocol]:
     """Create a UDP endpoint. Tests replace this to fake the network."""
@@ -115,7 +114,7 @@ def _parse_hello(resp: bytes, host: tuple[str, int]) -> HelloResponse:
 
 async def scan(
     timeout: float = DEFAULT_TIMEOUT,
-    local_ip_address: Optional[str] = None,
+    local_ip_address: str | None = None,
     discover_ip_address: str = DEFAULT_BCAST_ADDR,
     discover_ip_port: int = DEFAULT_PORT,
 ) -> AsyncIterator[HelloResponse]:
@@ -188,8 +187,8 @@ class Device:
 
     def __init__(
         self,
-        host: Tuple[str, int],
-        mac: Union[bytes, str],
+        host: tuple[str, int],
+        mac: bytes | str,
         devtype: int,
         timeout: float = DEFAULT_TIMEOUT,
         name: str = "",
@@ -214,42 +213,32 @@ class Device:
         self.aes = None
         self.update_aes(bytes.fromhex(self.__INIT_KEY))
 
-        self._lock: Optional[asyncio.Lock] = None
-        self._transport: Optional[asyncio.DatagramTransport] = None
-        self._protocol: Optional[_Protocol] = None
-        self._endpoint_addr: Optional[Tuple[str, int]] = None
+        self._lock: asyncio.Lock | None = None
+        self._transport: asyncio.DatagramTransport | None = None
+        self._protocol: _Protocol | None = None
+        self._endpoint_addr: tuple[str, int] | None = None
         self._recent: collections.deque[int] = collections.deque(maxlen=_RECENT_MAX)
-        self._reauth_lock: Optional[asyncio.Lock] = None
+        self._reauth_lock: asyncio.Lock | None = None
         self._auth_generation = 0
 
     def __repr__(self) -> str:
         """Return a formal representation of the device."""
         return (
-            "%s.%s(%s, mac=%r, devtype=%r, timeout=%r, name=%r, "
-            "model=%r, manufacturer=%r, is_locked=%r)"
-        ) % (
-            self.__class__.__module__,
-            self.__class__.__qualname__,
-            self.host,
-            self.mac,
-            self.devtype,
-            self.timeout,
-            self.name,
-            self.model,
-            self.manufacturer,
-            self.is_locked,
+            f"{self.__class__.__module__}.{self.__class__.__qualname__}("
+            f"{self.host}, mac={self.mac!r}, devtype={self.devtype!r}, "
+            f"timeout={self.timeout!r}, name={self.name!r}, "
+            f"model={self.model!r}, manufacturer={self.manufacturer!r}, "
+            f"is_locked={self.is_locked!r})"
         )
 
     def __str__(self) -> str:
         """Return a readable representation of the device."""
-        return "%s (%s / %s:%s / %s)" % (
-            self.name or "Unknown",
-            " ".join(filter(None, [self.manufacturer, self.model, hex(self.devtype)])),
-            *self.host,
-            ":".join(format(x, "02X") for x in self.mac),
-        )
+        ident = " ".join(filter(None, [self.manufacturer, self.model, hex(self.devtype)]))
+        mac = ":".join(format(x, "02X") for x in self.mac)
+        name = self.name or "Unknown"
+        return f"{name} ({ident} / {self.host[0]}:{self.host[1]} / {mac})"
 
-    async def __aenter__(self) -> "Device":
+    async def __aenter__(self) -> Device:
         return self
 
     async def __aexit__(self, *exc) -> None:
@@ -286,7 +275,7 @@ class Device:
         packet[0x04:0x14] = [0x31] * 16
         packet[0x1E] = 0x01
         packet[0x2D] = 0x01
-        packet[0x30:0x36] = "Test 1".encode()
+        packet[0x30:0x36] = b"Test 1"
 
         if self._lock is None:
             self._lock = asyncio.Lock()
@@ -317,7 +306,7 @@ class Device:
                 discover_ip_port=self.host[1],
             )
         ) as responses:
-            async for entry in responses:
+            async for entry in responses:  # noqa: B007 - first reply only
                 break
         if entry is None:
             raise e.NetworkTimeoutError(
@@ -412,9 +401,7 @@ class Device:
             # old address, so drop it.
             await self.aclose()
         if self._transport is None or self._transport.is_closing():
-            self._transport, self._protocol = await _open_endpoint(
-                remote_addr=self.host
-            )
+            self._transport, self._protocol = await _open_endpoint(remote_addr=self.host)
             self._endpoint_addr = self.host
             _LOGGER.debug("%s: endpoint opened", self.host[0])
         return self._transport, self._protocol  # type: ignore[return-value]
@@ -537,9 +524,7 @@ class Device:
 
         code = int.from_bytes(resp[0x22:0x24], "little", signed=True)
         if code in _REAUTH_CODES:
-            _LOGGER.debug(
-                "%s: device answered %d, re-authenticating", self.host[0], code
-            )
+            _LOGGER.debug("%s: device answered %d, re-authenticating", self.host[0], code)
             async with self._reauth_lock:  # type: ignore[union-attr]
                 if self._auth_generation == generation:
                     await self.auth()

@@ -57,10 +57,23 @@ line-length = 90
 target-version = "py313"
 
 [tool.ruff.lint]
-# Start from the upstream flake8 gate (syntax errors and undefined names)
-# plus pyflakes and import hygiene. Style rules widen once the async port lands.
-select = ["E9", "F", "I"]
+select = ["E", "W", "F", "I", "UP", "B", "ASYNC", "RUF"]
+ignore = [
+    # The device timeout parameters are the protocol timeout, not a
+    # cancellation scope.
+    "ASYNC109",
+    # Inherited from upstream and left alone: mutable class-level tables on
+    # device classes, and the type comparison in BroadlinkException.__eq__.
+    "RUF012",
+    "E721",
+]
 
 [tool.ruff.lint.per-file-ignores]
 # The package __init__ re-exports the public API.
 "broadlink/__init__.py" = ["F401"]
+# Tests fire helper tasks without keeping a reference on purpose.
+"tests/*" = ["RUF006"]
+# Long example payloads and comments inherited from upstream.
+"broadlink/climate.py" = ["E501"]
+"broadlink/light.py" = ["E501"]
+"broadlink/switch.py" = ["E501"]

@@ -62,7 +62,9 @@ class FakeNet:
 
     async def __call__(self, local_addr=None, remote_addr=None, broadcast=False):
         protocol = device_module._Protocol()
-        transport = FakeTransport(protocol, local_addr, remote_addr, broadcast, self.replies)
+        transport = FakeTransport(
+            protocol, local_addr, remote_addr, broadcast, self.replies
+        )
         self.replies = []
         protocol.connection_made(transport)
         self.endpoints.append(transport)
@@ -335,7 +337,9 @@ def test_auth_never_lets_a_queued_request_out_with_id_zero(net):
             loop.call_later(0.002, ep.protocol.queue.put_nowait, (reply, ep.remote_addr))
 
         ep.sendto = sendto
-        a, b = await asyncio.gather(dev.send_packet(0x6A, b"a"), dev.send_packet(0x6A, b"b"))
+        a, b = await asyncio.gather(
+            dev.send_packet(0x6A, b"a"), dev.send_packet(0x6A, b"b")
+        )
         return ep, a, b
 
     ep, a, b = run(go())
@@ -515,7 +519,9 @@ def test_concurrent_callers_share_one_reauth(net):
             ep.protocol.queue.put_nowait((reply, ep.remote_addr))
 
         ep.sendto = sendto
-        a, b = await asyncio.gather(dev.send_packet(0x6A, b"a"), dev.send_packet(0x6A, b"b"))
+        a, b = await asyncio.gather(
+            dev.send_packet(0x6A, b"a"), dev.send_packet(0x6A, b"b")
+        )
         return ep, {dev.decrypt(a[0x38:])[0], dev.decrypt(b[0x38:])[0]}
 
     ep, values = run(go())

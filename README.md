@@ -27,11 +27,13 @@ returning `bytes`, the unused `Device.lock` attribute removed, and
 import asyncio
 import broadlink
 
+
 async def main():
     devices = await broadlink.discover(timeout=5)
     device = devices[0]
     await device.auth()
     print(await device.check_sensors())
+
 
 asyncio.run(main())
 ```
@@ -121,7 +123,7 @@ In order to control the device, you need to connect it to your local network. If
   - Manually connect to the WiFi SSID named BroadlinkProv.
 2. Connect the device to your local network with the setup function.
 ```python3
-await broadlink.setup('myssid', 'mynetworkpass', 3)
+await broadlink.setup("myssid", "mynetworkpass", 3)
 ```
 
 Security mode options are (0 = none, 1 = WEP, 2 = WPA1, 3 = WPA2, 4 = WPA1/2)
@@ -130,7 +132,7 @@ Security mode options are (0 = none, 1 = WEP, 2 = WPA1, 3 = WPA2, 4 = WPA1/2)
 
 You may need to specify a broadcast address if setup is not working.
 ```python3
-await broadlink.setup('myssid', 'mynetworkpass', 3, ip_address='192.168.0.255')
+await broadlink.setup("myssid", "mynetworkpass", 3, ip_address="192.168.0.255")
 ```
 
 ### Discovery
@@ -146,17 +148,17 @@ You may need to specify `local_ip_address` or `discover_ip_address` if discovery
 
 Using the IP address of your local machine:
 ```python3
-devices = await broadlink.discover(local_ip_address='192.168.0.100')
+devices = await broadlink.discover(local_ip_address="192.168.0.100")
 ```
 
 Using the broadcast address of your subnet:
 ```python3
-devices = await broadlink.discover(discover_ip_address='192.168.0.255')
+devices = await broadlink.discover(discover_ip_address="192.168.0.255")
 ```
 
 If the device is locked, it may not be discoverable with broadcast. In such cases, you can use the unicast version `broadlink.hello()` for direct discovery:
 ```python3
-device = await broadlink.hello('192.168.0.16')
+device = await broadlink.hello("192.168.0.16")
 ```
 
 If you are a perfomance freak, use `broadlink.xdiscover()` to create devices instantly:
@@ -223,7 +225,7 @@ await device.sweep_frequency()
 ```python3
 ok, frequency = await device.check_frequency()
 if ok:
-    print(f'Frequency found: {frequency} MHz')
+    print(f"Frequency found: {frequency} MHz")
 ```
 4. Enter learning mode:
 ```python3

@@ -35,8 +35,16 @@ def test_every_public_method_is_covered() -> None:
     covered = {(e["case"]["cls"], e["case"]["method"]) for e in ENTRIES}
     # Methods on Device itself that need a live socket are covered in
     # test_transport.py, not here.
-    transport_level = {"auth", "hello", "ping", "send_packet", "encrypt", "decrypt",
-                       "update_aes", "aclose"}
+    transport_level = {
+        "auth",
+        "hello",
+        "ping",
+        "send_packet",
+        "encrypt",
+        "decrypt",
+        "update_aes",
+        "aclose",
+    }
     # Capture windows drive several requests over time; they are covered
     # with a scripted device in test_capture.py.
     transport_level |= {"capture", "capture_rf"}

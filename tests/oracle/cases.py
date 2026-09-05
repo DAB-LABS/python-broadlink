@@ -44,7 +44,9 @@ def rmminib_payload(body: bytes) -> str:
 def hysen_payload(body: bytes) -> str:
     """hysen.send_request: [len][body][crc16(body)]; returns body."""
     p_len = len(body) + 2
-    return hexb(struct.pack("<H", p_len), body, CRC16.calculate(body).to_bytes(2, "little"))
+    return hexb(
+        struct.pack("<H", p_len), body, CRC16.calculate(body).to_bytes(2, "little")
+    )
 
 
 def hvac_payload(data: bytes) -> str:
@@ -120,7 +122,9 @@ def s1c_payload() -> str:
 def hysen_status_body() -> bytes:
     body = bytearray(48)
     body[3] = 0x01  # remote_lock
-    body[4] = 0b1101_0001  # heating_cooling=1, temp_manual=1, active=1, offset add=0, power=1
+    body[4] = (
+        0b1101_0001  # heating_cooling=1, temp_manual=1, active=1, offset add=0, power=1
+    )
     body[5] = 43  # room temp 21.5
     body[6] = 44  # thermostat temp 22.0
     body[7] = 0x21  # loop_mode 2, auto_mode 1
@@ -145,13 +149,13 @@ def hysen_status_body() -> bytes:
 def hvac_state_data() -> bytes:
     data = bytearray(2 + 13)
     s = memoryview(data)[2:]
-    s[0x00] = (int(24) - 8 << 3) | 2  # target 24, swing_v POS2
+    s[0x00] = (24 - 8 << 3) | 2  # target 24, swing_v POS2
     s[0x01] = (7 << 5) | 0b100  # swing_h OFF
     s[0x03] = 2 << 5  # speed MID
     s[0x04] = 1 << 6  # preset TURBO (bits 6-7; bit 7 doubles as the half degree)
     s[0x05] = (1 << 5) | (1 << 2)  # mode COOL, sleep
     s[0x08] = (1 << 5) | (1 << 2) | 0b11  # power, clean, health
-    s[0x0A] = (1 << 4)  # display
+    s[0x0A] = 1 << 4  # display
     return bytes(data)
 
 
@@ -212,30 +216,63 @@ def all_cases() -> list[dict]:
 
     # Device base -------------------------------------------------------
     add(case("Device", 0x0000, "get_fwversion", responses=[fw_payload(0x1234)]))
-    add(case("Device", 0x0000, "set_name", "Living room", responses=[EMPTY], attrs=["name"]))
+    add(
+        case(
+            "Device", 0x0000, "set_name", "Living room", responses=[EMPTY], attrs=["name"]
+        )
+    )
     add(case("Device", 0x0000, "set_lock", True, responses=[EMPTY], attrs=["is_locked"]))
-    add(case("Device", 0x0000, "set_lock", False, responses=[EMPTY], attrs=["is_locked"],
-             setup={"name": "Kitchen"}))
+    add(
+        case(
+            "Device",
+            0x0000,
+            "set_lock",
+            False,
+            responses=[EMPTY],
+            attrs=["is_locked"],
+            setup={"name": "Kitchen"},
+        )
+    )
     add(case("Device", 0x0000, "get_type"))
 
     # RM family ---------------------------------------------------------
-    for cls, devtype, payload in (("rmmini", 0x2737, rmmini_payload),
-                                  ("rmpro", 0x272A, rmmini_payload),
-                                  ("rmminib", 0x5F36, rmminib_payload),
-                                  ("rm4mini", 0x51DA, rmminib_payload),
-                                  ("rm4pro", 0x6026, rmminib_payload),
-                                  ("rm", 0x2712, rmmini_payload),
-                                  ("rm4", 0x62BE, rmminib_payload)):
+    for cls, devtype, payload in (
+        ("rmmini", 0x2737, rmmini_payload),
+        ("rmpro", 0x272A, rmmini_payload),
+        ("rmminib", 0x5F36, rmminib_payload),
+        ("rm4mini", 0x51DA, rmminib_payload),
+        ("rm4pro", 0x6026, rmminib_payload),
+        ("rm", 0x2712, rmmini_payload),
+        ("rm4", 0x62BE, rmminib_payload),
+    ):
         add(case(cls, devtype, "send_data", b(IR_CODE), responses=[payload(b"")]))
         add(case(cls, devtype, "enter_learning", responses=[payload(b"")]))
         add(case(cls, devtype, "check_data", responses=[payload(IR_CODE)]))
         upd = rmminib_update_payload if payload is rmminib_payload else rm_update_payload
-        add(case(cls, devtype, "update", responses=[upd("Bedroom RM", True)],
-                 attrs=["name", "is_locked"]))
+        add(
+            case(
+                cls,
+                devtype,
+                "update",
+                responses=[upd("Bedroom RM", True)],
+                attrs=["name", "is_locked"],
+            )
+        )
 
     for cls, devtype in (("rmpro", 0x272A), ("rm", 0x2712)):
-        add(case(cls, devtype, "check_sensors", responses=[rmmini_payload(bytes([23, 4]))]))
-        add(case(cls, devtype, "check_temperature", responses=[rmmini_payload(bytes([23, 4]))]))
+        add(
+            case(
+                cls, devtype, "check_sensors", responses=[rmmini_payload(bytes([23, 4]))]
+            )
+        )
+        add(
+            case(
+                cls,
+                devtype,
+                "check_temperature",
+                responses=[rmmini_payload(bytes([23, 4]))],
+            )
+        )
 
     for cls, devtype in (("rm4mini", 0x51DA), ("rm4pro", 0x6026), ("rm4", 0x62BE)):
         body = bytes([24, 35, 51, 20])
@@ -243,15 +280,23 @@ def all_cases() -> list[dict]:
         add(case(cls, devtype, "check_temperature", responses=[rmminib_payload(body)]))
         add(case(cls, devtype, "check_humidity", responses=[rmminib_payload(body)]))
 
-    for cls, devtype, payload in (("rmpro", 0x272A, rmmini_payload),
-                                  ("rm4pro", 0x6026, rmminib_payload),
-                                  ("rm", 0x2712, rmmini_payload),
-                                  ("rm4", 0x62BE, rmminib_payload)):
+    for cls, devtype, payload in (
+        ("rmpro", 0x272A, rmmini_payload),
+        ("rm4pro", 0x6026, rmminib_payload),
+        ("rm", 0x2712, rmmini_payload),
+        ("rm4", 0x62BE, rmminib_payload),
+    ):
         add(case(cls, devtype, "sweep_frequency", responses=[payload(b"")]))
         found = bytes([1]) + struct.pack("<I", 433920)
         add(case(cls, devtype, "check_frequency", responses=[payload(found)]))
-        add(case(cls, devtype, "check_frequency",
-                 responses=[payload(bytes([0]) + struct.pack("<I", 0))]))
+        add(
+            case(
+                cls,
+                devtype,
+                "check_frequency",
+                responses=[payload(bytes([0]) + struct.pack("<I", 0))],
+            )
+        )
         add(case(cls, devtype, "find_rf_packet", responses=[payload(b"")]))
         add(case(cls, devtype, "find_rf_packet", 433.92, responses=[payload(b"")]))
         add(case(cls, devtype, "cancel_sweep_frequency", responses=[payload(b"")]))
@@ -265,39 +310,94 @@ def all_cases() -> list[dict]:
         add(case(cls, devtype, "set_power", True, responses=[EMPTY]))
         add(case(cls, devtype, "check_power", responses=[on]))
         add(case(cls, devtype, "check_power", responses=[off]))
-    add(case("sp2s", 0x2728, "get_energy",
-             responses=["00000000" + (1234).to_bytes(3, "little").hex() + "00" * 9]))
-    add(case("sp3s", 0x947A, "get_energy",
-             responses=["0000000000" + "341200" + "00" * 8]))  # bytes 5..7 = 34 12 00
+    add(
+        case(
+            "sp2s",
+            0x2728,
+            "get_energy",
+            responses=["00000000" + (1234).to_bytes(3, "little").hex() + "00" * 9],
+        )
+    )
+    add(
+        case("sp3s", 0x947A, "get_energy", responses=["0000000000" + "341200" + "00" * 8])
+    )  # bytes 5..7 = 34 12 00
     nl_on = "00000000" + "03" + "00" * 11  # power bit0, nightlight bit1
     add(case("sp3", 0x753E, "set_power", True, responses=[nl_on, EMPTY]))
     add(case("sp3", 0x753E, "set_nightlight", True, responses=[on, EMPTY]))
     add(case("sp3", 0x753E, "check_power", responses=[nl_on]))
     add(case("sp3", 0x753E, "check_nightlight", responses=[nl_on]))
 
-    sp4_state = {"pwr": 1, "ntlight": 0, "indicator": 1, "ntlbrightness": 50,
-                 "maxworktime": 0, "childlock": 0}
+    sp4_state = {
+        "pwr": 1,
+        "ntlight": 0,
+        "indicator": 1,
+        "ntlbrightness": 50,
+        "maxworktime": 0,
+        "childlock": 0,
+    }
     add(case("sp4", 0x7579, "get_state", responses=[json12_payload(sp4_state)]))
     add(case("sp4", 0x7579, "set_power", True, responses=[json12_payload(sp4_state)]))
-    add(case("sp4", 0x7579, "set_nightlight", False, responses=[json12_payload(sp4_state)]))
-    add(case("sp4", 0x7579, "set_state", pwr=True, ntlbrightness=25, childlock=True,
-             responses=[json12_payload(sp4_state)]))
+    add(
+        case(
+            "sp4", 0x7579, "set_nightlight", False, responses=[json12_payload(sp4_state)]
+        )
+    )
+    add(
+        case(
+            "sp4",
+            0x7579,
+            "set_state",
+            pwr=True,
+            ntlbrightness=25,
+            childlock=True,
+            responses=[json12_payload(sp4_state)],
+        )
+    )
     add(case("sp4", 0x7579, "check_power", responses=[json12_payload(sp4_state)]))
     add(case("sp4", 0x7579, "check_nightlight", responses=[json12_payload(sp4_state)]))
-    sp4b_state = dict(sp4_state, current=120, volt=230500, power=27600,
-                      totalconsum=-1, overload=0)
+    sp4b_state = dict(
+        sp4_state, current=120, volt=230500, power=27600, totalconsum=-1, overload=0
+    )
     add(case("sp4b", 0x5115, "get_state", responses=[json14_payload(sp4b_state)]))
-    add(case("sp4b", 0x5115, "set_state", pwr=False, responses=[json14_payload(sp4b_state)]))
+    add(
+        case(
+            "sp4b", 0x5115, "set_state", pwr=False, responses=[json14_payload(sp4b_state)]
+        )
+    )
     add(case("sp4b", 0x5115, "check_power", responses=[json14_payload(sp4b_state)]))
 
-    bg_state = {"pwr": 1, "pwr1": 1, "pwr2": 0, "maxworktime": 60, "maxworktime1": 60,
-                "maxworktime2": 0, "idcbrightness": 50}
+    bg_state = {
+        "pwr": 1,
+        "pwr1": 1,
+        "pwr2": 0,
+        "maxworktime": 60,
+        "maxworktime1": 60,
+        "maxworktime2": 0,
+        "idcbrightness": 50,
+    }
     add(case("bg1", 0x51E3, "get_state", responses=[json14_payload(bg_state)]))
-    add(case("bg1", 0x51E3, "set_state", pwr1=True, maxworktime2=15,
-             responses=[json14_payload(bg_state)]))
+    add(
+        case(
+            "bg1",
+            0x51E3,
+            "set_state",
+            pwr1=True,
+            maxworktime2=15,
+            responses=[json14_payload(bg_state)],
+        )
+    )
     add(case("ehc31", 0x6480, "get_state", responses=[json14_payload(bg_state)]))
-    add(case("ehc31", 0x6480, "set_state", pwr3=True, childlock=True, childlock4=False,
-             responses=[json14_payload(bg_state)]))
+    add(
+        case(
+            "ehc31",
+            0x6480,
+            "set_state",
+            pwr3=True,
+            childlock=True,
+            childlock4=False,
+            responses=[json14_payload(bg_state)],
+        )
+    )
 
     add(case("mp1", 0x4EB5, "set_power_mask", 0b0101, True, responses=[EMPTY]))
     add(case("mp1", 0x4EB5, "set_power", 1, True, responses=[EMPTY]))
@@ -310,42 +410,105 @@ def all_cases() -> list[dict]:
 
     # Sensors -----------------------------------------------------------
     add(case("a1", 0x2714, "check_sensors", responses=[a1_payload()]))
-    add(case("a1", 0x2714, "check_sensors", responses=[a1_payload(light=9, air=9, noise=9)]))
+    add(
+        case(
+            "a1", 0x2714, "check_sensors", responses=[a1_payload(light=9, air=9, noise=9)]
+        )
+    )
     add(case("a1", 0x2714, "check_sensors_raw", responses=[a1_payload()]))
     add(case("a2", 0x4F60, "check_sensors_raw", responses=[a2_payload()]))
 
     # Lights ------------------------------------------------------------
-    lb_state = {"red": 128, "blue": 255, "green": 128, "pwr": 1, "brightness": 75,
-                "colortemp": 2700, "hue": 240, "saturation": 50,
-                "transitionduration": 1500, "maxworktime": 0, "bulb_colormode": 1,
-                "bulb_scenes": "[]", "bulb_scene": "", "bulb_sceneidx": 255}
+    lb_state = {
+        "red": 128,
+        "blue": 255,
+        "green": 128,
+        "pwr": 1,
+        "brightness": 75,
+        "colortemp": 2700,
+        "hue": 240,
+        "saturation": 50,
+        "transitionduration": 1500,
+        "maxworktime": 0,
+        "bulb_colormode": 1,
+        "bulb_scenes": "[]",
+        "bulb_scene": "",
+        "bulb_sceneidx": 255,
+    }
     add(case("lb1", 0x60C7, "get_state", responses=[json14_payload(lb_state)]))
-    add(case("lb1", 0x60C7, "set_state", pwr=True, brightness=50, bulb_colormode=1,
-             bulb_scene="", responses=[json14_payload(lb_state)]))
+    add(
+        case(
+            "lb1",
+            0x60C7,
+            "set_state",
+            pwr=True,
+            brightness=50,
+            bulb_colormode=1,
+            bulb_scene="",
+            responses=[json14_payload(lb_state)],
+        )
+    )
     add(case("lb2", 0xA4F4, "get_state", responses=[json12_payload(lb_state)]))
-    add(case("lb2", 0xA4F4, "set_state", pwr=False, red=1, green=2, blue=3,
-             transitionduration=200, responses=[json12_payload(lb_state)]))
+    add(
+        case(
+            "lb2",
+            0xA4F4,
+            "set_state",
+            pwr=False,
+            red=1,
+            green=2,
+            blue=3,
+            transitionduration=200,
+            responses=[json12_payload(lb_state)],
+        )
+    )
 
     # Climate -----------------------------------------------------------
     status = hysen_payload(hysen_status_body())
     ack = hysen_payload(bytes([0x01, 0x06, 0x00, 0x02, 0x21, 0x00]))
-    add(case("hysen", 0x4EAD, "send_request", [0x01, 0x03, 0x00, 0x00, 0x00, 0x08],
-             responses=[status]))
+    add(
+        case(
+            "hysen",
+            0x4EAD,
+            "send_request",
+            [0x01, 0x03, 0x00, 0x00, 0x00, 0x08],
+            responses=[status],
+        )
+    )
     add(case("hysen", 0x4EAD, "get_temp", responses=[status]))
     add(case("hysen", 0x4EAD, "get_external_temp", responses=[status]))
     add(case("hysen", 0x4EAD, "get_full_status", responses=[status]))
     add(case("hysen", 0x4EAD, "set_mode", 1, 2, responses=[ack]))
     add(case("hysen", 0x4EAD, "set_mode", 0, 0, 1, responses=[ack]))
-    add(case("hysen", 0x4EAD, "set_advanced", 0, 0, 42, 2, 35, 5, -0.5, 0, 1,
-             responses=[ack]))
+    add(
+        case(
+            "hysen",
+            0x4EAD,
+            "set_advanced",
+            0,
+            0,
+            42,
+            2,
+            35,
+            5,
+            -0.5,
+            0,
+            1,
+            responses=[ack],
+        )
+    )
     add(case("hysen", 0x4EAD, "switch_to_auto", responses=[ack]))
     add(case("hysen", 0x4EAD, "switch_to_manual", responses=[ack]))
     add(case("hysen", 0x4EAD, "set_temp", 21.5, responses=[ack]))
     add(case("hysen", 0x4EAD, "set_power", 1, 0, 1, responses=[ack]))
     add(case("hysen", 0x4EAD, "set_time", 14, 30, 5, 3, responses=[ack]))
-    sched_wd = [{"start_hour": 6 + i, "start_minute": 15, "temp": 20 + i} for i in range(6)]
-    sched_we = [{"start_hour": 8, "start_minute": 0, "temp": 21},
-                {"start_hour": 22, "start_minute": 30, "temp": 17.5}]
+    sched_wd = [
+        {"start_hour": 6 + i, "start_minute": 15, "temp": 20 + i} for i in range(6)
+    ]
+    sched_we = [
+        {"start_hour": 8, "start_minute": 0, "temp": 21},
+        {"start_hour": 22, "start_minute": 30, "temp": 17.5},
+    ]
     add(case("hysen", 0x4EAD, "set_schedule", sched_wd, sched_we, responses=[ack]))
     # A corrupted CRC must be rejected.
     bad = bytearray.fromhex(status)
@@ -355,12 +518,69 @@ def all_cases() -> list[dict]:
     add(case("hvac", 0x4E2A, "get_state", responses=[hvac_payload(hvac_state_data())]))
     add(case("hvac", 0x4E2A, "get_ac_info", responses=[hvac_payload(hvac_info_data())]))
     add(case("hvac", 0x4E2A, "get_state", responses=[hvac_payload(b"\x00\x00\x01")]))
-    add(case("hvac", 0x4E2A, "set_state", True, 22.5, 1, 2, 0, 7, 0, False, False, True,
-             False, False, False, responses=[hvac_payload(hvac_state_data())]))
-    add(case("hvac", 0x4E2A, "set_state", True, 24, 4, 3, 2, 0, 0, False, False, True,
-             False, False, False, responses=[hvac_payload(hvac_state_data())]))
-    add(case("hvac", 0x4E2A, "set_state", True, 24, 2, 1, 1, 0, 0, False, False, True,
-             False, False, False, responses=[hvac_payload(hvac_state_data())]))
+    add(
+        case(
+            "hvac",
+            0x4E2A,
+            "set_state",
+            True,
+            22.5,
+            1,
+            2,
+            0,
+            7,
+            0,
+            False,
+            False,
+            True,
+            False,
+            False,
+            False,
+            responses=[hvac_payload(hvac_state_data())],
+        )
+    )
+    add(
+        case(
+            "hvac",
+            0x4E2A,
+            "set_state",
+            True,
+            24,
+            4,
+            3,
+            2,
+            0,
+            0,
+            False,
+            False,
+            True,
+            False,
+            False,
+            False,
+            responses=[hvac_payload(hvac_state_data())],
+        )
+    )
+    add(
+        case(
+            "hvac",
+            0x4E2A,
+            "set_state",
+            True,
+            24,
+            2,
+            1,
+            1,
+            0,
+            0,
+            False,
+            False,
+            True,
+            False,
+            False,
+            False,
+            responses=[hvac_payload(hvac_state_data())],
+        )
+    )
 
     # Covers ------------------------------------------------------------
     pos = "00000000" + "32" + "00" * 11  # payload[4] = 50
@@ -379,12 +599,29 @@ def all_cases() -> list[dict]:
     # Hub and alarm -----------------------------------------------------
     subs1 = {"total": 3, "list": [{"did": "a1", "pwr1": 1}, {"did": "a2", "pwr1": 0}]}
     subs2 = {"total": 3, "list": [{"did": "a2", "pwr1": 0}, {"did": "a3", "pwr1": 1}]}
-    add(case("s3", 0xA59C, "get_subdevices", 2,
-             responses=[json12_payload(subs1), json12_payload(subs2)]))
+    add(
+        case(
+            "s3",
+            0xA59C,
+            "get_subdevices",
+            2,
+            responses=[json12_payload(subs1), json12_payload(subs2)],
+        )
+    )
     add(case("s3", 0xA59C, "get_state", responses=[json12_payload({"pwr1": 1})]))
     add(case("s3", 0xA59C, "get_state", "a1", responses=[json12_payload({"pwr1": 1})]))
-    add(case("s3", 0xA59C, "set_state", "a1", True, None, False,
-             responses=[json12_payload({"pwr1": 1, "pwr3": 0})]))
+    add(
+        case(
+            "s3",
+            0xA59C,
+            "set_state",
+            "a1",
+            True,
+            None,
+            False,
+            responses=[json12_payload({"pwr1": 1, "pwr3": 0})],
+        )
+    )
     add(case("S1C", 0x2722, "get_sensors_status", responses=[s1c_payload()]))
 
     # Error path shared by every class: a non-zero device error code.
@@ -395,8 +632,22 @@ def all_cases() -> list[dict]:
 def error_cases() -> list[dict]:
     """Cases whose canned response carries a device error code."""
     return [
-        {"cls": "rmmini", "devtype": 0x2737, "method": "enter_learning",
-         "args": [], "kwargs": {}, "responses": [EMPTY], "error_code": 0xFFFB},
-        {"cls": "sp2", "devtype": 0x2711, "method": "check_power",
-         "args": [], "kwargs": {}, "responses": [EMPTY], "error_code": 0xFFF9},
+        {
+            "cls": "rmmini",
+            "devtype": 0x2737,
+            "method": "enter_learning",
+            "args": [],
+            "kwargs": {},
+            "responses": [EMPTY],
+            "error_code": 0xFFFB,
+        },
+        {
+            "cls": "sp2",
+            "devtype": 0x2711,
+            "method": "check_power",
+            "args": [],
+            "kwargs": {},
+            "responses": [EMPTY],
+            "error_code": 0xFFF9,
+        },
     ]
