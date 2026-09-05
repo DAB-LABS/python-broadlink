@@ -95,6 +95,15 @@ class StorageError(BroadlinkException):
     """Storage error."""
 
 
+class CaptureInProgressError(BroadlinkException):
+    """A capture window is already open on this device.
+
+    A universal remote has one receiver, so only one ``capture`` or
+    ``capture_rf`` window can be open at a time. Close the running one
+    before opening another.
+    """
+
+
 class WriteError(BroadlinkException):
     """Write error."""
 

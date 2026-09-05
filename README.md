@@ -191,6 +191,46 @@ You can exit the learning mode in the middle of the process by calling this meth
 await device.cancel_sweep_frequency()
 ```
 
+### Capturing signals
+
+`capture()` wraps the arm, poll, timeout and re-arm dance above into one
+async generator that yields each signal it hears as a `CapturedSignal`:
+
+```python3
+from contextlib import aclosing
+
+async with aclosing(device.capture(window=30)) as signals:
+    async for signal in signals:
+        print(signal.kind, len(signal.pulses), "pulses")
+        await other_device.send_data(signal.packet)
+```
+
+By default the window closes after the first signal. Pass
+`stop_after_first=False` to keep it open for the whole `window` (in seconds;
+`window=0` runs until the generator is closed), re-arming after each signal
+because the device holds only one code per learning session. A universal
+remote has a single receiver, so only one capture window can be open on a
+device at a time.
+
+`CapturedSignal` carries the device's own `packet` bytes (ready for
+`send_data`), the decoded `pulses` in microseconds at the correct tick, the
+`kind` (`SignalKind.IR`, `RF_433` or `RF_315`), the `repeat` count, and for
+RF the `frequency_mhz` the packet itself does not record.
+
+RF works the same way on the Pro models, with the carrier as the one extra
+input:
+
+```python3
+async with aclosing(device.capture_rf(window=30, frequency=433.92)) as signals:
+    async for signal in signals:
+        ...
+```
+
+Pass `frequency` whenever you know it. Without it the device first sweeps
+for the carrier while you hold a button down, then learns the code from a
+fresh press; the sweep is unreliable on some firmware and can report a
+carrier it never really locked, so the known-frequency path is preferred.
+
 ### Sending IR/RF packets
 ```python3
 await device.send_data(packet)
