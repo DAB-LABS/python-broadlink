@@ -55,6 +55,22 @@ history below starts at that fork point.
 
 ### Added
 
+- `capture()` and `capture_rf()`, async generators that own the arm, poll,
+  timeout and re-arm loop of a learning session and yield each signal as a
+  `CapturedSignal` (device packet, decoded pulses at the correct tick,
+  kind, repeat count, and for RF the carrier frequency). They re-arm on a
+  timer, because the device leaves learning mode silently, and after any
+  `send_data`, because a transmission ends the session; both intervals and
+  the poll cadence were set from a bench on an RM4 Pro. Only one window can
+  be open per device. `capture_rf()` (Pro models only) takes the carrier
+  frequency directly and falls back to the on-device sweep when it is not
+  given.
+- Packet helpers: `pulses_to_data` takes `kind` and `repeat`, `parse_packet`
+  is its inverse, and `SignalKind` names the IR, 433 MHz and 315 MHz bands.
+  A device's returned RF packet does not always use the canonical type byte
+  (an RM4 Pro answers a 433 MHz capture with 0xB1, not 0xB2), so the kind is
+  read by band and a capture is tagged from what it armed rather than the
+  byte.
 - Devices, carried over from pull requests against the original repository
   with their authors' commits intact: RM Max 0xAF8B (#838, Alexey Masolov);
   RM5 plus 0x5224 with a new `rm5plus` class (#831, Anil Daoud); RM mini 3

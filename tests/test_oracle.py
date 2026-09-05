@@ -37,6 +37,9 @@ def test_every_public_method_is_covered() -> None:
     # test_transport.py, not here.
     transport_level = {"auth", "hello", "ping", "send_packet", "encrypt", "decrypt",
                        "update_aes", "aclose"}
+    # Capture windows drive several requests over time; they are covered
+    # with a scripted device in test_capture.py.
+    transport_level |= {"capture", "capture_rf"}
     missing = []
     for name, cls in inspect.getmembers(broadlink, inspect.isclass):
         if not issubclass(cls, Device):
