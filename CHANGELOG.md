@@ -3,7 +3,7 @@
 All notable changes to this project are recorded here. The format follows
 Keep a Changelog; versions follow Semantic Versioning.
 
-## Unreleased
+## 1.0.0 - 2026-09-05
 
 This is the first release of `python-broadlink`, a maintained fork of
 `mjg59/python-broadlink` (PyPI `broadlink`, last released as 0.19.0). The
@@ -30,7 +30,15 @@ history below starts at that fork point.
 - Retry and timeout behaviour is unchanged: a request is repeated every
   second until `timeout` elapses, then `NetworkTimeoutError` is raised.
 - `dooya.set_percentage_and_wait` sleeps with `asyncio.sleep`.
-- The CLI tools run their body under `asyncio.run`.
+- The CLI tools run their body under `asyncio.run`. `broadlink_cli
+  --learn` and `--rflearn` use `capture()` / `capture_rf()`, so a learning
+  session no longer goes deaf when the device times out partway through;
+  `--window` sets how long to listen, `--keep` prints every code heard, and
+  `--send --durations --repeat N` sets the repeat count. The CLI README's
+  `--rfscanlearn` was a typo for `--rflearn` (mjg59/python-broadlink#803,
+  #830).
+- `pulses_to_data` returns `bytes` (it returned a `bytearray`, against its
+  own annotation).
 - Packaging moved to `pyproject.toml`; `setup.py` and the stale
   `requirements.txt` pin are gone. The distribution name is now
   `python-broadlink`; the import name stays `broadlink`. Python 3.13 or
