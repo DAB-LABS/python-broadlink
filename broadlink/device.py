@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import collections
 import contextlib
+import errno
 import logging
 import random
 import socket
@@ -51,6 +52,22 @@ _CLOSED = (None, None)
 _QueueItem = tuple[bytes | Exception | None, tuple[str, int] | None]
 """What the receive queue carries: a datagram with its source address, an
 error the socket reported (address ``None``), or ``_CLOSED``."""
+
+
+def _is_silence(item: object) -> bool:
+    """True for the socket errors that mean "no device answered".
+
+    A connected datagram socket learns from ICMP that nobody is listening
+    (port unreachable, ``ConnectionRefusedError``; ``ConnectionResetError``
+    on Windows) or that the host cannot be reached (``EHOSTUNREACH``, from
+    a router answering for a host that is off). The original library used
+    an unconnected socket that never received any of these and simply
+    timed out, and callers such as Home Assistant treat a timeout more
+    leniently than an ``OSError``, so these are treated as silence.
+    """
+    if isinstance(item, ConnectionRefusedError | ConnectionResetError):
+        return True
+    return isinstance(item, OSError) and item.errno == errno.EHOSTUNREACH
 
 
 class _Protocol(asyncio.DatagramProtocol):
@@ -570,12 +587,15 @@ class Device:
                     raise e.EndpointClosedError(
                         -4013, "Endpoint closed", "The device endpoint was closed"
                     )
-                if isinstance(resp, ConnectionRefusedError):
-                    # ICMP port unreachable: the host is up and nothing is
-                    # listening, or the device is rebooting. The original
-                    # library's unconnected socket never saw these, so keep
-                    # waiting and let the timeout decide, as it did.
-                    _LOGGER.debug("%s: port unreachable, still waiting", self.host[0])
+                if _is_silence(resp):
+                    # ICMP unreachable of one kind or another: the host is up
+                    # with nothing listening, the device is off or rebooting,
+                    # or a router answered for it. The original library's
+                    # unconnected socket never saw these, so keep waiting and
+                    # let the timeout decide, as it did.
+                    _LOGGER.debug(
+                        "%s: unreachable (%s), still waiting", self.host[0], resp
+                    )
                     continue
                 if isinstance(resp, Exception):
                     # A send failure (no route, address gone) or a fatal

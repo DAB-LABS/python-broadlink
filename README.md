@@ -205,6 +205,11 @@ async with device:
 await device.aclose()
 ```
 
+A device belongs to the event loop it first talks on: its socket and its
+locks are bound to that loop, so a script that runs several
+`asyncio.run(...)` calls should create the device inside each one rather
+than reuse it across them.
+
 The socket reopens by itself on the next call, so closing is cheap and
 safe to do at any time. A request that is in flight when `aclose()` runs
 fails with `EndpointClosedError`. A request that fails for a network
@@ -290,9 +295,8 @@ By default the window closes after the first signal. Pass
 because the device holds only one code per learning session. A universal
 remote has a single receiver, so only one capture window can be open on a
 device at a time: opening a second one raises `CaptureInProgressError`
-while the first is still held, either from the `capture()` call itself or
-from the new window's first iteration, depending on what the first window
-was doing at that moment. Always close a window you leave early
+from the new window's first iteration while the first is still held.
+Always close a window you leave early
 (`aclosing` above does it), otherwise it stays open until Python collects
 the generator.
 

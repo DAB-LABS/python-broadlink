@@ -107,4 +107,4 @@ def test_endpoint_heals_after_a_socket_error_on_loopback(caplog):
             await dev.aclose()
 
     assert asyncio.run(go()) == 9
-    assert "port unreachable" in caplog.text
+    assert "unreachable" in caplog.text
