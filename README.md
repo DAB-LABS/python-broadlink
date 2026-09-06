@@ -20,8 +20,9 @@ Every call that reaches a device is a coroutine and must be awaited. That
 is the main change from the original library's API: method names and
 arguments are the same, and so are return values, with the small
 exceptions listed in `CHANGELOG.md` (the IR tick constant, `pulses_to_data`
-returning `bytes`, the unused `Device.lock` attribute removed, and
-`timeout` parameters typed as floats).
+returning `bytes`, the unused `Device.lock` attribute removed, `timeout`
+parameters typed as floats, and the `mac` in a hello response typed as
+`bytes`).
 
 ```python
 import asyncio
@@ -50,11 +51,11 @@ The following devices are supported:
 - **Switches**: MCB1, SC1, SCB1E, SCB2
 - **Outlets**: BG 800, BG 900
 - **Power strips**: MP1-1K3S2U, MP1-1K4S, MP2
-- **Environment sensors**: A1
+- **Environment sensors**: A1, A2
 - **Alarm kits**: S1C, S2KIT
 - **Light bulbs**: LB1, LB26 R1, LB27 R1, SB800TD, LEDVANCE SMART+ WIFI CEILING TW 24W
 - **Curtain motors**: Dooya DT360E-45/20
-- **Thermostats**: Hysen HY02B05H
+- **Thermostats**: Hysen HY02/HY03
 - **Hubs**: S3
 
 ## Timing
@@ -172,6 +173,17 @@ After discovering the device, call the `auth()` method to obtain the authenticat
 ```python3
 await device.auth()
 ```
+
+The session key expires on the device after a while. When a request comes
+back with an expired-key answer, the library authenticates again and
+repeats the request once, so a long-running program does not need to
+handle that itself. If the second authentication fails, for example
+because the device was locked in the app in the meantime, the call raises
+the error the device gave the first time, the same `AuthorizationError`
+or `ConnectionClosedError` the original library raised, and it is up to
+the caller to decide what to do. In the worst case one call can wait out
+three timeouts (the request, the authentication, and the repeat), each
+bounded by `device.timeout`.
 
 ### Closing
 

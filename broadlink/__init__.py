@@ -1,16 +1,14 @@
-#!/usr/bin/env python3
 """The python-broadlink library."""
 
 import contextlib
 from collections.abc import AsyncIterator
-from typing import Optional, Union
 
 from . import exceptions as e
 from .alarm import S1C
 from .climate import hvac, hysen
 from .const import DEFAULT_BCAST_ADDR, DEFAULT_PORT, DEFAULT_TIMEOUT
 from .cover import dooya, dooya2, wser
-from .device import Device, _open_endpoint, ping, scan
+from .device import Device, ping, scan, send_setup_packet
 from .hub import s3
 from .light import lb1, lb2
 from .remote import rm, rm4, rm4mini, rm4pro, rm5plus, rmmini, rmminib, rmpro
@@ -340,8 +338,4 @@ async def setup(
     payload[0x20] = checksum & 0xFF  # Checksum 1 position
     payload[0x21] = checksum >> 8  # Checksum 2 position
 
-    transport, _ = await _open_endpoint(broadcast=True)
-    try:
-        transport.sendto(payload, (ip_address, DEFAULT_PORT))
-    finally:
-        transport.close()
+    await send_setup_packet(bytes(payload), ip_address)

@@ -8,6 +8,7 @@ import time
 import weakref
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
+from typing import Self
 
 from . import exceptions as e
 from .device import Device
@@ -53,10 +54,11 @@ class SignalKind(enum.IntEnum):
 
     @property
     def is_rf(self) -> bool:
+        """True for the radio bands."""
         return self is not SignalKind.IR
 
     @classmethod
-    def classify(cls, type_byte: int) -> "SignalKind":
+    def classify(cls, type_byte: int) -> Self:
         """Map a packet's raw first byte to a kind, tolerantly.
 
         The RF learn path returns bytes in the 0xB_ (433 MHz) and 0xD_
@@ -139,7 +141,7 @@ class ParsedPacket:
 
     kind: SignalKind
     repeat: int
-    pulses: list[int]
+    pulses: tuple[int, ...]
     type_byte: int
 
 
@@ -152,7 +154,7 @@ def parse_packet(data: bytes, tick: float = TICK) -> ParsedPacket:
     if len(data) < 4:
         raise ValueError("Malformed data.")
     kind = SignalKind.classify(data[0x00])
-    return ParsedPacket(kind, data[0x01], data_to_pulses(data, tick), data[0x00])
+    return ParsedPacket(kind, data[0x01], tuple(data_to_pulses(data, tick)), data[0x00])
 
 
 @dataclass(frozen=True)
@@ -170,7 +172,7 @@ class CapturedSignal:
 
     packet: bytes
     kind: SignalKind
-    pulses: list[int] = field(repr=False)
+    pulses: tuple[int, ...] = field(repr=False)
     repeat: int = 0
     frequency_mhz: float | None = None
     type_byte: int | None = None
@@ -183,7 +185,7 @@ class CapturedSignal:
         frequency_mhz: float | None = None,
         *,
         kind: SignalKind | None = None,
-    ) -> "CapturedSignal":
+    ) -> Self:
         """Build a signal from a device-returned packet.
 
         ``kind`` overrides the band read from the packet's type byte. A
@@ -200,7 +202,7 @@ class CapturedSignal:
         return cls(
             bytes(packet),
             kind,
-            data_to_pulses(packet),
+            tuple(data_to_pulses(packet)),
             packet[0x01],
             frequency_mhz,
             type_byte,
@@ -259,6 +261,9 @@ class rmmini(Device):
                     raise e.CaptureInProgressError(
                         "A capture window is already open; close it with aclose() first"
                     )
+                if self._window is not prev:
+                    # Another claimant got in during the two turns above.
+                    raise e.CaptureInProgressError("A capture window is already open")
         self._window = new
 
     async def _send(self, command: int, data: bytes = b"") -> bytes:

@@ -168,7 +168,7 @@ def test_capture_yields_first_signal_and_closes(cls_name, devtype):
     assert isinstance(sig, CapturedSignal)
     assert sig.packet == IR
     assert sig.kind is SignalKind.IR
-    assert sig.pulses == data_to_pulses(IR)
+    assert sig.pulses == tuple(data_to_pulses(IR))
     assert sig.frequency_mhz is None
     assert fake.commands[0][0] == CMD_LEARN
     assert fake.count(CMD_LEARN) == 1
@@ -661,7 +661,7 @@ def test_parse_packet_round_trip():
         parsed = parse_packet(packet)
         assert parsed.kind is kind
         assert parsed.repeat == 1
-        assert parsed.pulses == data_to_pulses(packet)
+        assert parsed.pulses == tuple(data_to_pulses(packet))
         for a, b in zip(pulses, parsed.pulses, strict=True):
             assert abs(a - b) <= 16
 
@@ -712,10 +712,16 @@ def test_signal_kind_flags():
     assert SignalKind(0x26) is SignalKind.IR
 
 
+def test_captured_signal_is_hashable():
+    a = CapturedSignal.from_packet(RF, 433.92)
+    assert isinstance(hash(a), int)  # a frozen value type belongs in a set
+    assert len({parse_packet(RF), parse_packet(RF)}) == 1
+
+
 def test_captured_signal_from_packet():
     sig = CapturedSignal.from_packet(RF, 433.92)
     assert sig.kind is SignalKind.RF_433
     assert sig.repeat == 0
-    assert sig.pulses == data_to_pulses(RF)
+    assert sig.pulses == tuple(data_to_pulses(RF))
     assert sig.frequency_mhz == 433.92
     assert sig.captured_at > 0

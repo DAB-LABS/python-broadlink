@@ -75,7 +75,6 @@ class FakeNet:
 def net(monkeypatch):
     fake = FakeNet()
     monkeypatch.setattr(device_module, "_open_endpoint", fake)
-    monkeypatch.setattr(broadlink, "_open_endpoint", fake)
     # Keep the retry loop from waiting on real time.
     monkeypatch.setattr(device_module, "DEFAULT_RETRY_INTVL", 0.005)
     return fake
@@ -386,6 +385,30 @@ def test_aclose_fails_inflight_request_fast(net):
     assert run(go()) < 1.0
 
 
+def test_aclose_during_endpoint_open_does_not_leak(net, monkeypatch):
+    """aclose() landing while create_datagram_endpoint is still running must
+    not leave the freshly opened socket behind."""
+    dev = fixed_device()
+    slow = net
+
+    async def slow_open(**kwargs):
+        await asyncio.sleep(0.02)
+        return await slow(**kwargs)
+
+    monkeypatch.setattr(device_module, "_open_endpoint", slow_open)
+
+    async def go():
+        task = asyncio.get_running_loop().create_task(dev.send_packet(0x6A, b""))
+        await asyncio.sleep(0.005)  # inside the slow open
+        await dev.aclose()
+        with pytest.raises(e.EndpointClosedError):
+            await task
+
+    run(go())
+    assert dev._transport is None
+    assert all(ep.closed for ep in net.endpoints)
+
+
 def test_host_change_reopens_endpoint(net):
     dev = fixed_device()
 
@@ -475,18 +498,100 @@ def test_expired_session_is_reauthenticated_once(net):
     assert dev.decrypt(resp[0x38:])[0] == 9
 
 
-def test_reauth_is_not_attempted_twice(net):
+def test_failed_reauth_returns_the_original_reply(net):
+    """When the library's own re-authentication fails, the caller must see
+    the reply the device gave to its request, exactly as 0.19.0 would have
+    shown it, so the caller's own recovery (Home Assistant's reauth flow)
+    still runs."""
     dev = fixed_device()
 
     async def go():
         await dev._endpoint()
         ep = net.endpoints[-1]
         expired = (make_response(dev, b"", error=0xFFF9), HOST)
-        ep.replies = [expired, expired]  # request fails, auth fails
-        return await dev.send_packet(0x6A, b"")
+        ep.replies = [expired, expired]  # request fails -7, auth fails -7
+        resp = await dev.send_packet(0x6A, b"")
+        return ep, resp
 
+    ep, resp = run(go())
+    assert int.from_bytes(resp[0x22:0x24], "little", signed=True) == -7
+    types = [int.from_bytes(f[0x26:0x28], "little") for f, _ in ep.sent]
+    assert types == [0x6A, 0x65]  # one auth attempt, no blind retry
     with pytest.raises(e.AuthorizationError):
-        run(go())
+        e.check_error(resp[0x22:0x24])
+
+
+def test_locked_device_surfaces_as_the_original_error(net):
+    """Device locked in the app: request answered -7, auth answered -1. The
+    caller gets the -7 frame back (its check_error raises
+    AuthorizationError), and its own auth() call then sees the -1."""
+    dev = fixed_device()
+
+    async def go():
+        await dev._endpoint()
+        ep = net.endpoints[-1]
+
+        def sendto(data, addr=None):
+            ep.sent.append((bytes(data), addr or ep.remote_addr))
+            ptype = int.from_bytes(data[0x26:0x28], "little")
+            error = 0xFFFF if ptype == 0x65 else 0xFFF9  # -1 to auth, -7 to requests
+            ep.protocol.queue.put_nowait((make_response(dev, b"", error=error), HOST))
+
+        ep.sendto = sendto
+        resp = await dev.send_packet(0x6A, b"")
+        code = int.from_bytes(resp[0x22:0x24], "little", signed=True)
+        with pytest.raises(e.AuthenticationError):
+            await dev.auth()
+        return ep, code
+
+    ep, code = run(go())
+    assert code == -7
+    types = [int.from_bytes(f[0x26:0x28], "little") for f, _ in ep.sent]
+    assert types == [0x6A, 0x65, 0x65]
+
+
+def test_request_queued_behind_an_auth_still_reauths_if_needed(net):
+    """The auth generation is read under the lock, so a request that was
+    queued while another caller's auth() ran, and still gets -7, performs
+    its own re-authentication instead of assuming the earlier one covers
+    it."""
+    dev = fixed_device()
+    dev.id = 5
+    session_key = bytes.fromhex("00112233445566778899aabbccddeeff")
+    fresh = fixed_device()
+    auth_reply = make_response(fresh, (0x42).to_bytes(4, "little") + session_key)
+    renewed = fixed_device()
+    renewed.update_aes(session_key)
+
+    async def go():
+        await dev._endpoint()
+        ep = net.endpoints[-1]
+        auths = {"n": 0}
+        loop = asyncio.get_running_loop()
+
+        def sendto(data, addr=None):
+            ep.sent.append((bytes(data), addr or ep.remote_addr))
+            ptype = int.from_bytes(data[0x26:0x28], "little")
+            if ptype == 0x65:
+                auths["n"] += 1
+                reply = auth_reply
+            elif auths["n"] < 2:
+                reply = make_response(dev, b"", error=0xFFF9)  # still -7 after auth #1
+            else:
+                reply = make_response(renewed, bytes([9]) + bytes(15))
+            loop.call_later(0.002, ep.protocol.queue.put_nowait, (reply, ep.remote_addr))
+
+        ep.sendto = sendto
+        first_auth = loop.create_task(dev.auth())
+        await asyncio.sleep(0)  # let auth() take the lock first
+        resp = await dev.send_packet(0x6A, b"")
+        await first_auth
+        return ep, resp
+
+    ep, resp = run(go())
+    types = [int.from_bytes(f[0x26:0x28], "little") for f, _ in ep.sent]
+    assert types == [0x65, 0x6A, 0x65, 0x6A]
+    assert dev.decrypt(resp[0x38:])[0] == 9
 
 
 def test_concurrent_callers_share_one_reauth(net):

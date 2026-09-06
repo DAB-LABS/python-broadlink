@@ -4,7 +4,7 @@ import asyncio
 import base64
 import sys
 import time
-from contextlib import aclosing
+from contextlib import AsyncExitStack, aclosing
 from typing import List
 
 import broadlink
@@ -96,6 +96,12 @@ args = parser.parse_args()
 
 
 async def main():
+    async with AsyncExitStack() as stack:
+        await run_commands(stack)
+
+
+async def run_commands(stack: AsyncExitStack):
+    """Run the requested commands; the device is closed with the stack."""
     dev = None
 
     if args.device:
@@ -110,6 +116,7 @@ async def main():
 
     if args.host or args.device:
         dev = broadlink.gendevice(devtype, (host, DEFAULT_PORT), mac)
+        await stack.enter_async_context(dev)
         await dev.auth()
 
     if args.joinwifi:
