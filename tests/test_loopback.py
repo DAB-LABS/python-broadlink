@@ -108,3 +108,19 @@ def test_endpoint_heals_after_a_socket_error_on_loopback(caplog):
 
     assert asyncio.run(go()) == 9
     assert "unreachable" in caplog.text
+
+
+def test_unbound_endpoint_is_bound_explicitly():
+    """scan, ping and setup open an endpoint with no address on either
+    side; it is bound to 0.0.0.0 so it can receive on every platform."""
+
+    async def go():
+        transport, _ = await device_module._open_endpoint(broadcast=True)
+        try:
+            host, port = transport.get_extra_info("sockname")[:2]
+            return host, port
+        finally:
+            transport.close()
+
+    host, port = asyncio.run(go())
+    assert host == "0.0.0.0" and port > 0
