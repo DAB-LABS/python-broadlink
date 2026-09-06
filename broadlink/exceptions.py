@@ -168,6 +168,6 @@ def exception(err_code: int) -> BroadlinkException:
 
 def check_error(error: bytes) -> None:
     """Raise exception if an error occurred."""
-    error_code = struct.unpack("h", error)[0]
+    error_code = struct.unpack("<h", error)[0]
     if error_code:
         raise exception(error_code)

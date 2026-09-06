@@ -3,6 +3,51 @@
 All notable changes to this project are recorded here. The format follows
 Keep a Changelog; versions follow Semantic Versioning.
 
+## 1.0.3 - 2026-09-06
+
+Fixes from a third review, this one of 1.0.2. No change to the wire
+format. One small API change: `pulses` on a captured signal is a tuple.
+
+### Fixed
+
+- When the device answered that the session key had expired and the
+  re-authentication then failed (for example because the device had been
+  locked in the app), the call raised `AuthenticationError` from the
+  re-authentication instead of the error the device gave the request. The
+  original library never re-authenticated, so a program written against
+  it, Home Assistant's integration included, handles the request's own
+  error and never expected the other one. The failed re-authentication is
+  now logged and the request's original reply is returned, so the caller
+  sees the same `AuthorizationError` or `ConnectionClosedError` it always
+  did.
+- The authentication generation was read before the request lock was
+  taken rather than under it, so a request queued behind an `auth()`
+  could observe a stale generation and skip a re-authentication it needed.
+- `aclose()` racing an endpoint that was still being opened could leave
+  the new socket open and unreferenced. The open now notices the close
+  and fails with `EndpointClosedError`.
+- After a new capture window gives the finalizer its turn, it re-checks
+  that no other window claimed the device in the meantime.
+- `CapturedSignal` and `ParsedPacket` are frozen dataclasses, but they
+  held a list, so they could not be hashed or put in a set. `pulses` is
+  now a `tuple[int, ...]`.
+- `check_error` unpacks the error code as little-endian explicitly
+  (`"<h"`), matching the rest of the code, instead of native order.
+- The CLI closes the device it opens instead of leaving that to
+  `asyncio.run`, which warned under `python -X dev`.
+- The locks are created in `__init__` rather than lazily in two places.
+
+### Changed
+
+- `send_packet` accepts a `bytearray` payload as well as `bytes`.
+- `setup()` sends its provisioning packet through a new
+  `send_setup_packet()` helper in `broadlink.device` instead of reaching
+  into a private function.
+- README: the re-authentication contract and its worst case (one call can
+  wait out up to three timeouts), the A2 sensor and the Hysen HY02/HY03
+  in the device list, and the hello response's `mac` being `bytes` in the
+  list of differences from 0.19.0.
+
 ## 1.0.2 - 2026-09-05
 
 Fixes from a second, adversarial review of 1.0.1 and a re-test of the
