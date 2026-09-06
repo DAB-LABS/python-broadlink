@@ -3,6 +3,59 @@
 All notable changes to this project are recorded here. The format follows
 Keep a Changelog; versions follow Semantic Versioning.
 
+## 1.0.4 - 2026-09-06
+
+Fixes from a fourth review, of 1.0.3, which drove the real socket path the
+test suite fakes and found two behaviours the original library had and
+this one had lost. One device fix carried from upstream.
+
+### Fixed
+
+- A connected socket that went bad (interface bounce, host address change,
+  container network restart) was never replaced: the request waited out
+  its timeout and every later request did the same until `aclose()`. The
+  original opened a socket per call, so it healed on the next one. Now a
+  send failure the socket reports (no route, address gone) fails the
+  waiting request at once with that `OSError`, and a request that fails
+  for a network reason (that, or a timeout) drops the socket so the next
+  call opens a fresh one. A transport asyncio closes from its side also
+  wakes the waiting request instead of leaving it to time out. An ICMP
+  "port unreachable" (a host that is up with nothing listening, or a
+  device mid-reboot) is logged and treated as silence, since the
+  original's unconnected socket never saw those, so the timeout decides
+  as before.
+- `discover()`, `hello()`, `ping()` and `setup()` passed hostnames straight
+  to `sendto`, which resolved them with a blocking call on the event loop
+  and swallowed the failure: a name that did not resolve made `hello()`
+  wait out its timeout and `ping()` return without sending. The
+  destination is now resolved once, off the loop, and `socket.gaierror`
+  propagates as it did from the original's socket. A send failure in
+  `ping()` and `setup()` is raised too.
+- The A2 air quality sensor's request frame was two bytes short and
+  declared the wrong length, and real units answered every read with
+  error -5. The frame now follows the SP4/LB1 layout, which is byte for
+  byte the packet upstream pull request #826 tested on an A2. That is the
+  one oracle case re-recorded on purpose; the fix is carried on the
+  strength of that report, not of hardware we have.
+- `xdiscover()` closes the `scan()` generator it wraps, so the discovery
+  socket is closed when the caller stops iterating rather than by the
+  finalizer a few turns later (1.0.2 claimed this and only `Device.hello()`
+  did it).
+- Two identical captures compare equal: `CapturedSignal.captured_at` no
+  longer takes part in equality or hashing.
+- Async generator functions are annotated `AsyncGenerator`, which has the
+  `aclose()` the library and the README call; `AsyncIterator` does not.
+- The `TICK` docstring tells the same story as the README: 8192/269 from
+  protocol.md's measured conversion, not a 32768 Hz clock.
+
+### Added
+
+- A loopback test module that drives the real datagram endpoint, including
+  the socket-error path, since every other transport test fakes it.
+- README: which errors `discover()` and `hello()` raise, that a failed
+  request drops its socket, and that `CaptureInProgressError` can come
+  from the `capture()` call or from the first iteration.
+
 ## 1.0.3 - 2026-09-06
 
 Fixes from a third review, this one of 1.0.2. No change to the wire

@@ -1,6 +1,6 @@
 """Support for sensors."""
 
-from collections.abc import Sequence
+import struct
 
 from . import exceptions as e
 from .device import Device
@@ -48,35 +48,35 @@ class a2(Device):
 
     TYPE = "A2"
 
-    async def _send(self, operation: int, data: Sequence = b""):
-        """Send a command to the device."""
-        packet = bytearray(12)
-        packet[0x02] = 0xA5
-        packet[0x03] = 0xA5
-        packet[0x04] = 0x5A
-        packet[0x05] = 0x5A
-        packet[0x08] = operation
-        packet[0x09] = 0x0B
+    async def _send(self, operation: int, data: bytes = b"") -> bytes:
+        """Send a command to the device.
 
-        if data:
-            data_len = len(data)
-            packet[0x0A] = data_len & 0xFF
-            packet[0x0B] = data_len >> 8
-            packet += bytes(2)
-            packet.extend(data)
-
-        checksum = sum(packet, 0xBEAF) & 0xFFFF
-        packet[0x06] = checksum & 0xFF
-        packet[0x07] = checksum >> 8
-
-        packet_len = len(packet) - 2
-        packet[0x00] = packet_len & 0xFF
-        packet[0x01] = packet_len >> 8
+        The frame is the one the SP4 and LB1 families use: a two-byte
+        length, the A5A5 5A5A marker, a checksum, the operation, 0x0B and
+        a four-byte data length. The 0.19.0 code wrote a two-byte data
+        length and a length field two short, and real A2 units answered
+        every request with error -5 (mjg59/python-broadlink#826).
+        """
+        packet = bytearray(14)
+        struct.pack_into(
+            "<HHHHBBI",
+            packet,
+            0,
+            12 + len(data),
+            0xA5A5,
+            0x5A5A,
+            0,
+            operation,
+            0x0B,
+            len(data),
+        )
+        packet.extend(data)
+        checksum = sum(packet[0x02:], 0xBEAF) & 0xFFFF
+        packet[0x06:0x08] = checksum.to_bytes(2, "little")
 
         resp = await self.send_packet(0x6A, packet)
         e.check_error(resp[0x22:0x24])
-        payload = self.decrypt(resp[0x38:])
-        return payload
+        return self.decrypt(resp[0x38:])
 
     async def check_sensors_raw(self) -> dict:
         """Return the state of the sensors in raw format."""
