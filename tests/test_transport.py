@@ -233,22 +233,52 @@ def stamped(dev: Device, payload: bytes, count: int, error: int = 0) -> bytes:
     return bytes(frame)
 
 
-def test_late_reply_to_timed_out_request_is_not_taken_as_next_reply(net):
-    """The defect that 0.19.0 could not have because it threw its socket away
-    after every call: a slow answer to request 1 arriving after request 1
-    timed out must not be returned as the answer to request 2."""
+def test_timed_out_request_drops_its_endpoint(net):
+    """A request that times out throws its socket away, as 0.19.0 did by
+    opening one per call, so a socket that has gone bad heals on the next
+    call and a late reply to the timed-out request lands on a port nobody
+    listens to any more."""
     dev = fixed_device()
     dev.timeout = 0.02
 
     async def go():
         await dev._endpoint()
-        ep = net.endpoints[-1]
+        first = net.endpoints[-1]
         with pytest.raises(e.NetworkTimeoutError):
-            await dev.send_packet(0x6A, b"")  # request 1, count 0x8001, no answer
+            await dev.send_packet(0x6A, b"")
+        assert first.closed
+        assert dev._transport is None
+        # The late answer arrives on the old socket; the next request opens
+        # a new one and only sees its own reply.
+        late = stamped(dev, bytes([1]) + bytes(15), 0x8001)
+        first.protocol.queue.put_nowait((late, HOST))
+        dev.timeout = 1
+        net.replies = [(stamped(dev, bytes([2]) + bytes(15), 0x8002), HOST)]
+        resp = await dev.send_packet(0x6A, b"")
+        assert net.endpoints[-1] is not first
+        return dev.decrypt(resp[0x38:])[0]
+
+    assert run(go()) == 2
+
+
+def test_late_reply_to_cancelled_request_is_not_taken_as_next_reply(net):
+    """The endpoint survives a cancelled request, so a slow answer to it can
+    arrive while the next request is waiting on the same socket. It must
+    not be returned as the answer to that request."""
+    dev = fixed_device()
+
+    async def go():
+        await dev._endpoint()
+        ep = net.endpoints[-1]
+        task = asyncio.get_running_loop().create_task(dev.send_packet(0x6A, b""))
+        await asyncio.sleep(0.005)  # request 1 (count 0x8001) is on the wire
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert dev._transport is not None
         # Its late reply lands while request 2 (count 0x8002) is waiting.
         late = stamped(dev, bytes([1]) + bytes(15), 0x8001)
         good = stamped(dev, bytes([2]) + bytes(15), 0x8002)
-        ep.replies = [late, good] and []
         ep.protocol.queue.put_nowait((late, HOST))
 
         async def answer_later():
@@ -256,7 +286,6 @@ def test_late_reply_to_timed_out_request_is_not_taken_as_next_reply(net):
             ep.protocol.queue.put_nowait((good, HOST))
 
         asyncio.get_running_loop().create_task(answer_later())
-        dev.timeout = 1
         resp = await dev.send_packet(0x6A, b"")
         return dev.decrypt(resp[0x38:])[0]
 
@@ -422,6 +451,53 @@ def test_host_change_reopens_endpoint(net):
     run(go())
     assert [ep.remote_addr for ep in net.endpoints] == [HOST, ("192.0.2.99", 80)]
     assert net.endpoints[0].closed
+
+
+def test_send_failure_fails_the_request_fast_and_heals(net):
+    """A connected socket whose send fails (route gone, address changed)
+    reports it through error_received. The request must fail with that
+    OSError at once, not after the timeout, and the next call must get a
+    fresh socket rather than the dead one."""
+    dev = fixed_device()
+    dev.timeout = 5
+
+    async def go():
+        await dev._endpoint()
+        bad = net.endpoints[-1]
+
+        def failing_sendto(data, addr=None):
+            bad.protocol.error_received(OSError(101, "Network is unreachable"))
+
+        bad.sendto = failing_sendto
+        t0 = asyncio.get_running_loop().time()
+        with pytest.raises(OSError) as err:
+            await dev.send_packet(0x6A, b"")
+        assert err.value.errno == 101
+        assert asyncio.get_running_loop().time() - t0 < 1.0
+        assert bad.closed
+        assert dev._transport is None
+        net.replies = [(make_response(dev, b""), HOST)]
+        await dev.send_packet(0x6A, b"")
+        return net.endpoints[-1] is not bad
+
+    assert run(go())
+
+
+def test_transport_lost_with_error_wakes_the_request(net):
+    """If asyncio closes the transport from its side, the waiting request
+    is told instead of waiting out its timeout."""
+    dev = fixed_device()
+    dev.timeout = 5
+
+    async def go():
+        task = asyncio.get_running_loop().create_task(dev.send_packet(0x6A, b""))
+        await asyncio.sleep(0.005)
+        net.endpoints[-1].protocol.connection_lost(OSError(22, "Invalid argument"))
+        with pytest.raises(OSError) as err:
+            await task
+        return err.value.errno
+
+    assert run(go()) == 22
 
 
 # ------------------------------------------------------------------------- auth
@@ -766,6 +842,64 @@ def test_ping_packet(net):
     assert len(packet) == 0x30
     assert packet[0x26] == 1
     assert net.endpoints[-1].closed
+
+
+def test_unresolvable_hostname_raises_at_once(net, monkeypatch):
+    """0.19.0 raised socket.gaierror from sendto for a bad hostname. The
+    async version resolves the name off the loop first and lets the same
+    error through, instead of waiting out the timeout (hello) or sending
+    nothing and returning (ping)."""
+
+    async def no_such_host(host, port):
+        raise socket.gaierror(socket.EAI_NONAME, "Name or service not known")
+
+    monkeypatch.setattr(device_module, "_resolve", no_such_host)
+
+    async def go():
+        loop = asyncio.get_running_loop()
+        t0 = loop.time()
+        with pytest.raises(socket.gaierror):
+            await broadlink.hello("nonexistent.invalid", timeout=5)
+        with pytest.raises(socket.gaierror):
+            await broadlink.ping("nonexistent.invalid")
+        with pytest.raises(socket.gaierror):
+            await broadlink.setup("ssid", "pass", 3, ip_address="nonexistent.invalid")
+        return loop.time() - t0
+
+    assert run(go()) < 1.0
+    assert net.endpoints == []  # nothing was opened for a name that failed
+
+
+def test_resolve_returns_a_numeric_address():
+    assert run(device_module._resolve("127.0.0.1", 80)) == ("127.0.0.1", 80)
+
+
+def test_send_failure_on_ping_and_setup_is_raised(net, monkeypatch):
+    """ping and setup fire one datagram and do not wait for a reply; a send
+    failure still has to reach the caller, as it did from a plain socket."""
+    ep_holder = []
+    original = net.__call__
+
+    async def go():
+
+        async def open_and_break(**kwargs):
+            transport, protocol = await original(**kwargs)
+
+            def failing_sendto(data, addr=None):
+                protocol.error_received(OSError(101, "Network is unreachable"))
+
+            transport.sendto = failing_sendto
+            ep_holder.append(transport)
+            return transport, protocol
+
+        monkeypatch.setattr(device_module, "_open_endpoint", open_and_break)
+        with pytest.raises(OSError):
+            await broadlink.ping("192.0.2.1")
+        with pytest.raises(OSError):
+            await broadlink.setup("ssid", "pass", 3, ip_address="192.0.2.255")
+        return all(ep.closed for ep in ep_holder)
+
+    assert run(go())
 
 
 # ------------------------------------------------------------------ gendevice

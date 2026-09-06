@@ -15,7 +15,7 @@ import contextlib
 import logging
 import random
 import socket
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -48,12 +48,20 @@ _RECENT_MAX = 64
 _CLOSED = (None, None)
 """Sentinel put on the receive queue when the endpoint is closed."""
 
+_QueueItem = tuple[bytes | Exception | None, tuple[str, int] | None]
+"""What the receive queue carries: a datagram with its source address, an
+error the socket reported (address ``None``), or ``_CLOSED``."""
+
 
 class _Protocol(asyncio.DatagramProtocol):
-    """Datagram protocol that hands every received packet to a queue."""
+    """Datagram protocol that hands every received packet to a queue.
+
+    Errors the socket reports go on the same queue, so the request that is
+    waiting fails at once instead of waiting out its timeout.
+    """
 
     def __init__(self) -> None:
-        self.queue: asyncio.Queue[tuple[bytes, tuple[str, int]]] = asyncio.Queue()
+        self.queue: asyncio.Queue[_QueueItem] = asyncio.Queue()
         self.transport: asyncio.DatagramTransport | None = None
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
@@ -65,17 +73,29 @@ class _Protocol(asyncio.DatagramProtocol):
         self.queue.put_nowait((data, addr))
 
     def error_received(self, exc: Exception) -> None:
-        # ICMP unreachable and the like. Surface it as a receive of nothing;
-        # the retry loop will time out and raise NetworkTimeoutError.
-        pass
+        """Queue a send failure or an ICMP error for the waiting request."""
+        self.queue.put_nowait((exc, None))
 
     def connection_lost(self, exc: Exception | None) -> None:
-        """Nothing to do; a waiting request is told through the queue."""
+        """Wake the waiting request if asyncio closed the transport on us."""
+        self.queue.put_nowait((exc, None) if exc is not None else _CLOSED)
 
     def drain(self) -> None:
         """Drop anything that arrived before the current request."""
         while not self.queue.empty():
             self.queue.get_nowait()
+
+    def raise_if_error(self) -> None:
+        """Raise the error a send just reported, if it reported one.
+
+        asyncio delivers a failed ``sendto`` to ``error_received`` before
+        ``sendto`` returns, so a fire-and-forget sender can check right
+        after sending and raise the ``OSError`` the way a plain socket did.
+        """
+        while not self.queue.empty():
+            item, _ = self.queue.get_nowait()
+            if isinstance(item, Exception):
+                raise item
 
 
 async def _open_endpoint(
@@ -93,6 +113,21 @@ async def _open_endpoint(
         allow_broadcast=broadcast,
     )
     return transport, protocol  # type: ignore[return-value]
+
+
+async def _resolve(host: str, port: int) -> tuple[str, int]:
+    """Resolve a destination once, off the event loop.
+
+    Sending to a hostname through an unconnected datagram socket would
+    resolve it with a blocking call on the loop and hide the failure. A
+    name that does not resolve raises ``socket.gaierror`` here, as the
+    original library's ``sendto`` did.
+    """
+    loop = asyncio.get_running_loop()
+    info = await loop.getaddrinfo(
+        host, port, family=socket.AF_INET, type=socket.SOCK_DGRAM
+    )
+    return info[0][4][:2]  # type: ignore[return-value]
 
 
 def _hello_packet(local_ip_address: str, port: int) -> bytearray:
@@ -119,13 +154,14 @@ async def scan(
     local_ip_address: str | None = None,
     discover_ip_address: str = DEFAULT_BCAST_ADDR,
     discover_ip_port: int = DEFAULT_PORT,
-) -> AsyncIterator[HelloResponse]:
+) -> AsyncGenerator[HelloResponse]:
     """Broadcast a hello message and yield responses as they arrive.
 
     The hello is repeated every ``DEFAULT_RETRY_INTVL`` seconds until
     ``timeout`` elapses. Each device is yielded once.
     """
     local_addr = (local_ip_address, 0) if local_ip_address else None
+    target = await _resolve(discover_ip_address, discover_ip_port)
     transport, protocol = await _open_endpoint(local_addr=local_addr, broadcast=True)
     try:
         if local_ip_address:
@@ -140,7 +176,7 @@ async def scan(
         discovered: set[tuple[tuple[str, int], bytes, int]] = set()
 
         while (loop.time() - start) < timeout:
-            transport.sendto(packet, (discover_ip_address, discover_ip_port))
+            transport.sendto(packet, target)
             deadline = min(DEFAULT_RETRY_INTVL, timeout - (loop.time() - start))
             slot_end = loop.time() + deadline
             while True:
@@ -151,7 +187,11 @@ async def scan(
                     resp, host = await asyncio.wait_for(protocol.queue.get(), remaining)
                 except TimeoutError:
                     break
-                if len(resp) < 0x80:
+                if resp is None:
+                    return  # The transport was closed under us.
+                if isinstance(resp, Exception):
+                    raise resp
+                if host is None or len(resp) < 0x80:
                     continue
                 entry = _parse_hello(resp, host)
                 key = (entry[1], entry[2], entry[0])
@@ -167,9 +207,11 @@ async def send_setup_packet(
     payload: bytes, ip_address: str, port: int = DEFAULT_PORT
 ) -> None:
     """Broadcast one Wi-Fi provisioning packet to a device in AP mode."""
-    transport, _ = await _open_endpoint(broadcast=True)
+    target = await _resolve(ip_address, port)
+    transport, protocol = await _open_endpoint(broadcast=True)
     try:
-        transport.sendto(payload, (ip_address, port))
+        transport.sendto(payload, target)
+        protocol.raise_if_error()
     finally:
         transport.close()
 
@@ -181,11 +223,13 @@ async def ping(ip_address: str, port: int = DEFAULT_PORT) -> None:
     Useful to prevent reboots when the cloud cannot be reached.
     It must be sent every 2 minutes in such cases.
     """
-    transport, _ = await _open_endpoint(broadcast=True)
+    target = await _resolve(ip_address, port)
+    transport, protocol = await _open_endpoint(broadcast=True)
     try:
         packet = bytearray(0x30)
         packet[0x26] = 1
-        transport.sendto(packet, (ip_address, port))
+        transport.sendto(packet, target)
+        protocol.raise_if_error()
     finally:
         transport.close()
 
@@ -407,6 +451,22 @@ class Device:
         if protocol is not None:
             protocol.queue.put_nowait(_CLOSED)  # type: ignore[arg-type]
 
+    def _drop_endpoint(self) -> None:
+        """Throw the endpoint away after a failure; the next call reopens it.
+
+        A connected datagram socket can go bad for good (the interface
+        bounced, the host's address changed), and the original library
+        never noticed because it opened a socket per call. Dropping the
+        endpoint whenever a request fails restores that self-healing.
+        """
+        transport = self._transport
+        self._transport = None
+        self._protocol = None
+        self._endpoint_addr = None
+        if transport is not None:
+            transport.close()
+            _LOGGER.debug("%s: endpoint dropped after a failure", self.host[0])
+
     async def _endpoint(self) -> tuple[asyncio.DatagramTransport, _Protocol]:
         if self._transport is not None and self._endpoint_addr != self.host:
             # The caller changed host; the connected socket points at the
@@ -510,6 +570,19 @@ class Device:
                     raise e.EndpointClosedError(
                         -4013, "Endpoint closed", "The device endpoint was closed"
                     )
+                if isinstance(resp, ConnectionRefusedError):
+                    # ICMP port unreachable: the host is up and nothing is
+                    # listening, or the device is rebooting. The original
+                    # library's unconnected socket never saw these, so keep
+                    # waiting and let the timeout decide, as it did.
+                    _LOGGER.debug("%s: port unreachable, still waiting", self.host[0])
+                    continue
+                if isinstance(resp, Exception):
+                    # A send failure (no route, address gone) or a fatal
+                    # transport error: fail now and throw the socket away.
+                    _LOGGER.debug("%s: socket error: %s", self.host[0], resp)
+                    self._drop_endpoint()
+                    raise resp
                 resp = self._validate(resp)
                 reply_count = int.from_bytes(resp[0x28:0x2A], "little")
                 if reply_count == count or reply_count not in self._recent:
@@ -521,6 +594,7 @@ class Device:
                 )
             if loop.time() - start >= timeout:
                 _LOGGER.debug("%s: no reply within %ss", self.host[0], timeout)
+                self._drop_endpoint()
                 raise e.NetworkTimeoutError(
                     -4000,
                     "Network timeout",

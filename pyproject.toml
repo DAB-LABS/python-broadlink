@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "python-broadlink"
-version = "1.0.3"
+version = "1.0.4"
 description = "Python API for controlling Broadlink devices"
 readme = "README.md"
 license = "MIT"

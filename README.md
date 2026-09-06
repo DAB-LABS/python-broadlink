@@ -162,6 +162,11 @@ If the device is locked, it may not be discoverable with broadcast. In such case
 device = await broadlink.hello("192.168.0.16")
 ```
 
+`discover()` and `hello()` raise `NetworkTimeoutError` when nothing answers
+within the timeout, `socket.gaierror` when a hostname does not resolve, and
+`OSError` when the socket cannot be opened or the send fails (no route, for
+example), the same errors the original library raised from its socket.
+
 If you are a perfomance freak, use `broadlink.xdiscover()` to create devices instantly:
 ```python3
 async for device in broadlink.xdiscover():
@@ -202,9 +207,14 @@ await device.aclose()
 
 The socket reopens by itself on the next call, so closing is cheap and
 safe to do at any time. A request that is in flight when `aclose()` runs
-fails with `EndpointClosedError`. An integration that creates devices
-should close them when it unloads; a device that is never closed holds
-its socket until it is garbage collected.
+fails with `EndpointClosedError`. A request that fails for a network
+reason (a timeout, or an `OSError` from the socket such as "network is
+unreachable" after an interface change, raised at once) also drops the socket, so the
+next call starts fresh rather than reusing one that has gone bad, which
+is how the original library behaved by opening a socket per call. An
+integration that creates devices should close them when it unloads; a
+device that is never closed holds its socket until it is garbage
+collected.
 
 The next steps depend on the type of device you want to control.
 
@@ -280,7 +290,9 @@ By default the window closes after the first signal. Pass
 because the device holds only one code per learning session. A universal
 remote has a single receiver, so only one capture window can be open on a
 device at a time: opening a second one raises `CaptureInProgressError`
-while the first is still held. Always close a window you leave early
+while the first is still held, either from the `capture()` call itself or
+from the new window's first iteration, depending on what the first window
+was doing at that moment. Always close a window you leave early
 (`aclosing` above does it), otherwise it stays open until Python collects
 the generator.
 

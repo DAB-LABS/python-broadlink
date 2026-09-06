@@ -1,7 +1,7 @@
 """The python-broadlink library."""
 
 import contextlib
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 
 from . import exceptions as e
 from .alarm import S1C
@@ -294,15 +294,15 @@ async def xdiscover(
     local_ip_address: str | None = None,
     discover_ip_address: str = DEFAULT_BCAST_ADDR,
     discover_ip_port: int = DEFAULT_PORT,
-) -> AsyncIterator[Device]:
+) -> AsyncGenerator[Device]:
     """Discover devices connected to the local network.
 
     Yields each device as soon as it answers.
     """
-    async for resp in scan(
-        timeout, local_ip_address, discover_ip_address, discover_ip_port
-    ):
-        yield gendevice(*resp)
+    responses = scan(timeout, local_ip_address, discover_ip_address, discover_ip_port)
+    async with contextlib.aclosing(responses):
+        async for resp in responses:
+            yield gendevice(*resp)
 
 
 # Setup a new Broadlink device via AP Mode. Review the README to see how to enter AP Mode.

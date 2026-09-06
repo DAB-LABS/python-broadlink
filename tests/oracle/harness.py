@@ -18,6 +18,13 @@ responses. Results are normalized to plain JSON so they can be stored.
 
 The runner accepts awaitables so the same cases can drive an asynchronous
 ``send_packet`` later without changing the cases.
+
+Deliberate departures from 0.19.0, re-recorded on purpose and reviewed in
+the pull request that made them:
+
+- ``a2.check_sensors_raw`` (1.0.4): the request frame follows the SP4/LB1
+  layout (length 12, four-byte data length) instead of the 0.19.0 frame
+  the device rejected with error -5. Upstream #826.
 """
 
 from __future__ import annotations

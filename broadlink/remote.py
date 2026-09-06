@@ -6,7 +6,7 @@ import logging
 import struct
 import time
 import weakref
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Self
 
@@ -18,9 +18,10 @@ _LOGGER = logging.getLogger(__name__)
 TICK = 8192 / 269
 """Duration of one Broadlink timing unit in microseconds (about 30.45 us).
 
-The RM firmware counts pulses on a 32768 Hz clock (protocol.md: us * 269 / 8192).
-Earlier releases used 32.84, the inverse of the right ratio applied the wrong
-way round, which compressed externally sourced IR codes by about 7 percent
+The value comes from protocol.md, whose conversion "us * 269 / 8192 works
+very well" was measured against real firmware; 8192/269 is its inverse.
+Earlier releases used 32.84, the right ratio applied the wrong way round,
+which compressed externally sourced IR codes by about 7 percent
 (mjg59/python-broadlink#839). Codes learned and replayed through the same
 device were unaffected because both directions shared the constant.
 """
@@ -176,7 +177,7 @@ class CapturedSignal:
     repeat: int = 0
     frequency_mhz: float | None = None
     type_byte: int | None = None
-    captured_at: float = field(default_factory=time.time, repr=False)
+    captured_at: float = field(default_factory=time.time, repr=False, compare=False)
 
     @classmethod
     def from_packet(
@@ -300,7 +301,7 @@ class rmmini(Device):
         stop_after_first: bool = True,
         poll_interval: float = DEFAULT_POLL_INTERVAL,
         rearm_interval: float = DEFAULT_REARM_INTERVAL,
-    ) -> AsyncIterator[CapturedSignal]:
+    ) -> AsyncGenerator[CapturedSignal]:
         """Open an infrared capture window and yield what the device hears.
 
         The device is put into learning mode and polled every
@@ -348,7 +349,7 @@ class rmmini(Device):
         frequency_mhz: float | None,
         *,
         claim: list | None = None,
-    ) -> AsyncIterator[CapturedSignal]:
+    ) -> AsyncGenerator[CapturedSignal]:
         # ``claim`` carries a weak reference to this generator (filled in by
         # the caller after creating it); None means the caller owns the
         # window claim, as capture_rf does for its inner loop.
@@ -457,7 +458,7 @@ class rmpro(rmmini):
         stop_after_first: bool = True,
         poll_interval: float = DEFAULT_POLL_INTERVAL,
         rearm_interval: float = DEFAULT_REARM_INTERVAL,
-    ) -> AsyncIterator[CapturedSignal]:
+    ) -> AsyncGenerator[CapturedSignal]:
         """Open a radio frequency capture window and yield what the device hears.
 
         With ``frequency`` (in MHz, for example 433.92) the device goes
@@ -496,7 +497,7 @@ class rmpro(rmmini):
         rearm_interval: float,
         *,
         claim: list,
-    ) -> AsyncIterator[CapturedSignal]:
+    ) -> AsyncGenerator[CapturedSignal]:
         if window < 0 or poll_interval <= 0:
             raise ValueError("window must be 0 or positive, poll_interval positive")
         await self._claim_window(claim[0])
