@@ -116,6 +116,9 @@ SUPPORTED_TYPES = {
         0x27A6: ("RM plus", "Broadlink"),
         0x27A9: ("RM pro+", "Broadlink"),
         0x27C3: ("RM pro+", "Broadlink"),
+        # The RM Max answers the RM pro framing; the RM4 framing (length
+        # prefix) gets "device is locked" from it. Tested on hardware in
+        # upstream #838, whose text says rm4pro but whose diff says rmpro.
         0xAF8B: ("RM Max", "Broadlink"),
     },
     rmminib: {
@@ -281,12 +284,9 @@ async def discover(
     discover_ip_port: int = DEFAULT_PORT,
 ) -> list[Device]:
     """Discover devices connected to the local network."""
-    return [
-        device
-        async for device in xdiscover(
-            timeout, local_ip_address, discover_ip_address, discover_ip_port
-        )
-    ]
+    devices = xdiscover(timeout, local_ip_address, discover_ip_address, discover_ip_port)
+    async with contextlib.aclosing(devices):
+        return [device async for device in devices]
 
 
 async def xdiscover(

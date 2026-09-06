@@ -1,11 +1,11 @@
 """Support for universal remotes."""
 
 import asyncio
+import contextlib
 import enum
 import logging
 import struct
 import time
-import weakref
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Self
@@ -221,51 +221,39 @@ class rmmini(Device):
         # against the value it saw when it armed the device and re-arms
         # after any send, since the device has one front end for both.
         self._tx_generation = 0
-        # Weak reference to the async generator of the current capture
-        # window, if any. See _claim_window.
-        self._window: weakref.ReferenceType | None = None
+        # True while a capture window holds the device's receiver. Set by
+        # the window on its first iteration, cleared when its generator
+        # finishes or is closed, including by asyncio's finalizer.
+        self._capturing = False
 
     @property
     def capture_active(self) -> bool:
         """True while a capture window is open on this device."""
-        window = self._window() if self._window is not None else None
-        return window is not None and window.ag_frame is not None
+        return self._capturing
 
-    def _check_window(self) -> None:
-        """Fail fast at call time if another window is being iterated now."""
-        old = self._window() if self._window is not None else None
-        if old is not None and old.ag_frame is not None and old.ag_running:
-            raise e.CaptureInProgressError("A capture window is already open")
-
-    async def _claim_window(self, new: weakref.ReferenceType) -> None:
-        """Make sure the previous window is really gone, then register ``new``.
+    async def _claim_window(self) -> None:
+        """Take the receiver for a new window, or refuse.
 
         A consumer that walked away from a window without closing it (for
         example ``break`` out of ``async for`` with no ``aclosing``) leaves
         the generator to asyncio's finalizer, which closes it on the next
-        loop iteration once nothing references it. Give that a turn. If the
-        window is still alive after that, someone still holds it, whether
-        they are inside ``__anext__`` or paused between signals, and the new
-        window is refused rather than taken from under them.
+        loop iteration once nothing references it, and closing it releases
+        the claim. Give that a turn. If the claim is still held after that,
+        someone still has the window, whether inside ``__anext__`` or
+        paused between signals, and the new window is refused rather than
+        taken from under them.
         """
-        prev = self._window
-        if prev is not None:
-            old = prev()
-            if old is not None and old.ag_frame is not None:
-                if old.ag_running:
-                    raise e.CaptureInProgressError("A capture window is already open")
-                del old  # Hold no reference while the finalizer gets its turn.
-                await asyncio.sleep(0)
-                await asyncio.sleep(0)
-                old = prev()
-                if old is not None and old.ag_frame is not None:
-                    raise e.CaptureInProgressError(
-                        "A capture window is already open; close it with aclose() first"
-                    )
-                if self._window is not prev:
-                    # Another claimant got in during the two turns above.
-                    raise e.CaptureInProgressError("A capture window is already open")
-        self._window = new
+        if self._capturing:
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+            if self._capturing:
+                raise e.CaptureInProgressError(
+                    "A capture window is already open; close it with aclose() first"
+                )
+        self._capturing = True
+
+    def _release_window(self) -> None:
+        self._capturing = False
 
     async def _send(self, command: int, data: bytes = b"") -> bytes:
         """Send a packet to the device."""
@@ -319,13 +307,11 @@ class rmmini(Device):
         Use ``contextlib.aclosing`` (or iterate to the end) so the window is
         released promptly. Only one capture window can be open per device:
         opening one while another is still held raises
-        ``CaptureInProgressError``. A window whose generator was dropped
-        without being closed is finalized by asyncio on the next loop
-        iteration and does not block.
+        ``CaptureInProgressError`` on its first iteration. A window whose
+        generator was dropped without being closed is finalized by asyncio
+        on the next loop iteration and does not block.
         """
-        self._check_window()
-        holder: list = []
-        gen = self._capture_loop(
+        return self._capture_loop(
             self.enter_learning,
             window,
             stop_after_first,
@@ -333,10 +319,8 @@ class rmmini(Device):
             rearm_interval,
             SignalKind.IR,
             None,
-            claim=holder,
+            claim=True,
         )
-        holder.append(weakref.ref(gen))
-        return gen
 
     async def _capture_loop(
         self,
@@ -348,18 +332,43 @@ class rmmini(Device):
         kind: SignalKind,
         frequency_mhz: float | None,
         *,
-        claim: list | None = None,
+        claim: bool,
     ) -> AsyncGenerator[CapturedSignal]:
-        # ``claim`` carries a weak reference to this generator (filled in by
-        # the caller after creating it); None means the caller owns the
-        # window claim, as capture_rf does for its inner loop.
+        # ``claim`` is False when the caller already holds the window, as
+        # capture_rf does for its inner loop.
         if window < 0:
             raise ValueError("window must be 0 (open-ended) or positive")
         if poll_interval <= 0 or rearm_interval <= 0:
             raise ValueError("poll_interval and rearm_interval must be positive")
         if claim:
-            await self._claim_window(claim[0])
+            await self._claim_window()
+        try:
+            body = self._capture_body(
+                arm,
+                window,
+                stop_after_first,
+                poll_interval,
+                rearm_interval,
+                kind,
+                frequency_mhz,
+            )
+            async with contextlib.aclosing(body):
+                async for signal in body:
+                    yield signal
+        finally:
+            if claim:
+                self._release_window()
 
+    async def _capture_body(
+        self,
+        arm: Callable[[], Awaitable[None]],
+        window: float,
+        stop_after_first: bool,
+        poll_interval: float,
+        rearm_interval: float,
+        kind: SignalKind,
+        frequency_mhz: float | None,
+    ) -> AsyncGenerator[CapturedSignal]:
         loop = asyncio.get_running_loop()
         deadline = loop.time() + window if window else None
         timeouts = 0
@@ -475,18 +484,9 @@ class rmpro(rmmini):
         Each ``CapturedSignal`` carries the carrier in ``frequency_mhz``,
         which the packet itself does not record.
         """
-        self._check_window()
-        holder: list = []
-        gen = self._capture_rf_loop(
-            window,
-            frequency,
-            stop_after_first,
-            poll_interval,
-            rearm_interval,
-            claim=holder,
+        return self._capture_rf_loop(
+            window, frequency, stop_after_first, poll_interval, rearm_interval
         )
-        holder.append(weakref.ref(gen))
-        return gen
 
     async def _capture_rf_loop(
         self,
@@ -495,13 +495,26 @@ class rmpro(rmmini):
         stop_after_first: bool,
         poll_interval: float,
         rearm_interval: float,
-        *,
-        claim: list,
     ) -> AsyncGenerator[CapturedSignal]:
         if window < 0 or poll_interval <= 0:
             raise ValueError("window must be 0 or positive, poll_interval positive")
-        await self._claim_window(claim[0])
+        await self._claim_window()
+        try:
+            async for signal in self._capture_rf_body(
+                window, frequency, stop_after_first, poll_interval, rearm_interval
+            ):
+                yield signal
+        finally:
+            self._release_window()
 
+    async def _capture_rf_body(
+        self,
+        window: float,
+        frequency: float | None,
+        stop_after_first: bool,
+        poll_interval: float,
+        rearm_interval: float,
+    ) -> AsyncGenerator[CapturedSignal]:
         loop = asyncio.get_running_loop()
         deadline = loop.time() + window if window else None
 
@@ -526,13 +539,11 @@ class rmpro(rmmini):
             rearm_interval,
             kind,
             frequency,
-            claim=None,
+            claim=False,
         )
-        try:
+        async with contextlib.aclosing(inner):
             async for signal in inner:
                 yield signal
-        finally:
-            await inner.aclose()
 
     async def _sweep(self, deadline: float | None, poll_interval: float) -> float | None:
         """Sweep for the remote's carrier; return it in MHz, or None if the

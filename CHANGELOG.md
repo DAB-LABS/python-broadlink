@@ -3,6 +3,42 @@
 All notable changes to this project are recorded here. The format follows
 Keep a Changelog; versions follow Semantic Versioning.
 
+## 1.0.5 - 2026-09-06
+
+Fixes from a fifth review, of 1.0.4. No change to the wire format or the
+public API.
+
+### Fixed
+
+- A connected socket can learn from ICMP that a host cannot be reached
+  (`EHOSTUNREACH`, typically a router answering for a device that is off),
+  and 1.0.4 raised that as an `OSError` at once. The original library's
+  unconnected socket never saw it and simply timed out, and Home
+  Assistant tolerates a timeout for a few polls where it marks a device
+  unavailable on the first `OSError`. Host unreachable, and Windows's
+  `ConnectionResetError` for port unreachable, are now treated as silence
+  like port unreachable already was: logged, the timeout decides, and the
+  socket is still dropped afterwards. Measured on the bench first: on the
+  test network neither an on-link address with no host behind it nor an
+  off-subnet one produced the ICMP, so this is insurance for networks
+  that do, not a fix for one that reproduced.
+- `discover()` closes the `xdiscover()` generator it drains, like
+  `hello()` and `xdiscover()` itself.
+
+### Changed
+
+- The capture window claim is a flag set on the window's first iteration
+  and cleared when its generator finishes or is closed, including by
+  asyncio's finalizer, in place of the weak reference and frame
+  inspection used since 1.0.0. Same behaviour, pinned by the same tests:
+  a dropped window gets one turn to be finalized and then blocks nobody,
+  a held or paused window is refused to a newcomer. One visible
+  difference: `CaptureInProgressError` now always comes from the new
+  window's first iteration, never from the `capture()` call itself.
+- A comment next to the RM Max entry says why it sits in `rmpro`
+  (upstream #838's text says rm4pro, its tested diff says rmpro).
+- README: a device belongs to the event loop it first talks on.
+
 ## 1.0.4 - 2026-09-06
 
 Fixes from a fourth review, of 1.0.3, which drove the real socket path the

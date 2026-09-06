@@ -483,6 +483,40 @@ def test_send_failure_fails_the_request_fast_and_heals(net):
     assert run(go())
 
 
+@pytest.mark.parametrize(
+    "err",
+    [
+        ConnectionRefusedError(111, "Connection refused"),
+        ConnectionResetError(10054, "Connection reset"),
+        OSError(113, "No route to host"),
+    ],
+    ids=["port-unreachable", "windows-reset", "host-unreachable"],
+)
+def test_icmp_unreachable_is_silence_not_an_error(net, err):
+    """0.19.0's unconnected socket never saw ICMP errors: a device that was
+    off, rebooting, or behind a router answering for it produced silence
+    and then NetworkTimeoutError, which Home Assistant tolerates for a few
+    polls where it would mark the device unavailable on an OSError. The
+    connected socket must keep that contract."""
+    dev = fixed_device()
+    dev.timeout = 0.05
+
+    async def go():
+        await dev._endpoint()
+        ep = net.endpoints[-1]
+
+        def icmp_sendto(data, addr=None):
+            ep.protocol.error_received(err)
+
+        ep.sendto = icmp_sendto
+        with pytest.raises(e.NetworkTimeoutError):
+            await dev.send_packet(0x6A, b"")
+        assert ep.closed  # dropped after the timeout, so the next call heals
+        assert dev._transport is None
+
+    run(go())
+
+
 def test_transport_lost_with_error_wakes_the_request(net):
     """If asyncio closes the transport from its side, the waiting request
     is told instead of waiting out its timeout."""
