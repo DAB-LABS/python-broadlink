@@ -120,7 +120,14 @@ async def _open_endpoint(
     remote_addr: tuple[str, int] | None = None,
     broadcast: bool = False,
 ) -> tuple[asyncio.DatagramTransport, _Protocol]:
-    """Create a UDP endpoint. Tests replace this to fake the network."""
+    """Create a UDP endpoint. Tests replace this to fake the network.
+
+    An endpoint with no address on either side is bound to ``0.0.0.0``
+    explicitly; the proactor loop on Windows starts receiving as soon as the
+    endpoint exists, which needs a bound socket.
+    """
+    if local_addr is None and remote_addr is None:
+        local_addr = ("0.0.0.0", 0)
     loop = asyncio.get_running_loop()
     transport, protocol = await loop.create_datagram_endpoint(
         _Protocol,
@@ -643,6 +650,11 @@ class Device:
                 if self._auth_generation == generation:
                     try:
                         await self.auth()
+                    except (e.NetworkTimeoutError, e.EndpointClosedError):
+                        # A network failure during re-authentication is
+                        # reported as what it is, not as the device's
+                        # original expired-key answer.
+                        raise
                     except e.BroadlinkException as err:
                         _LOGGER.debug(
                             "%s: re-authentication failed: %s", self.host[0], err

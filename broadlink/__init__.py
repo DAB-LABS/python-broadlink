@@ -116,9 +116,9 @@ SUPPORTED_TYPES = {
         0x27A6: ("RM plus", "Broadlink"),
         0x27A9: ("RM pro+", "Broadlink"),
         0x27C3: ("RM pro+", "Broadlink"),
-        # The RM Max answers the RM pro framing; the RM4 framing (length
-        # prefix) gets "device is locked" from it. Tested on hardware in
-        # upstream #838, whose text says rm4pro but whose diff says rmpro.
+        # Mapping follows the diff in upstream #838 (its text says rm4pro,
+        # its diff says rmpro). Testers in that thread reported the device
+        # answering "locked" on auth, so treat it as reported, not confirmed.
         0xAF8B: ("RM Max", "Broadlink"),
     },
     rmminib: {

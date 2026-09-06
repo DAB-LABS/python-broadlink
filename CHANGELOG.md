@@ -3,6 +3,32 @@
 All notable changes to this project are recorded here. The format follows
 Keep a Changelog; versions follow Semantic Versioning.
 
+## 1.0.6 - 2026-09-06
+
+Small items from a sixth review, of 1.0.5, which found no defect in the
+code. No change to the wire format or the public API.
+
+### Fixed
+
+- A network failure during the library's own re-authentication (a timeout,
+  or the endpoint being closed) is raised as that failure. 1.0.3 to 1.0.5
+  returned the device's original expired-key answer instead, so the caller
+  raised `AuthorizationError` for what was really a timeout.
+- An endpoint with no address on either side (discovery, `ping()`,
+  `setup()`) is bound to `0.0.0.0` explicitly, for the proactor loop on
+  Windows, which starts receiving as soon as the endpoint exists.
+- The RM Max comment and the 1.0.0 changelog entry no longer claim more
+  than upstream #838 showed: the mapping follows that pull request's diff,
+  and its testers reported the device answering "locked" on
+  authentication, so it is listed as reported, not confirmed.
+
+### Changed
+
+- An undecodable capture is logged at debug rather than warning, since the
+  window re-arms and carries on by itself.
+- The RF capture loop closes its inner generator with `aclosing` like the
+  IR one.
+
 ## 1.0.5 - 2026-09-06
 
 Fixes from a fifth review, of 1.0.4. No change to the wire format or the
@@ -314,16 +340,17 @@ history below starts at that fork point.
   byte.
 - Devices, carried over from pull requests against the original repository
   with their authors credited (the changes were squash-merged with
-  `Co-authored-by` trailers naming each author): RM Max 0xAF8B (#838, Alexey Masolov);
-  RM5 plus 0x5224 with a new `rm5plus` class (#831, Anil Daoud); RM mini 3
+  `Co-authored-by` trailers naming each author): RM5 plus 0x5224 with a new `rm5plus` class (#831, Anil Daoud); RM mini 3
   OEM 0xA544 (#823, Bartłomiej Nogaś); RM mini 3 CMCC 0x27C8 (#802,
   shuxin); LB26 R1 0xA517 (#812, techitapart); SP mini 3-AL 0x7D15 (#805,
   bbcbbk); LEDVANCE SMART+ WIFI CEILING TW 24W 0x6498 (#799, Felipe Martins
   Diel).
 - Devices reported in issues against the original repository, added by
   model name to the existing class for that family and not yet confirmed on
-  hardware: MP1-1K3S2U 0x4EDA (#816) and SP4 0xA57A (#758). Please open an
-  issue if either does not behave.
+  hardware: MP1-1K3S2U 0x4EDA (#816) and SP4 0xA57A (#758), and the RM Max
+  0xAF8B from #838 (Alexey Masolov, credited), whose testers reported the
+  device answering "locked" on authentication. Please open an issue if any
+  of them does not behave.
 - `cryptography` 43 or newer is required, the first release with wheels for
   Python 3.13 (supersedes mjg59/python-broadlink#749).
 - A test suite. The `tests/oracle` package records, for every public method

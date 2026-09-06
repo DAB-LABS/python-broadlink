@@ -408,7 +408,7 @@ class rmmini(Device):
                 except ValueError as err:
                     # A packet the device returned but we cannot decode. Log
                     # it, re-arm and keep the window open.
-                    _LOGGER.warning(
+                    _LOGGER.debug(
                         "%s: ignoring an undecodable capture (%s): %s",
                         self.host[0],
                         err,
@@ -500,10 +500,12 @@ class rmpro(rmmini):
             raise ValueError("window must be 0 or positive, poll_interval positive")
         await self._claim_window()
         try:
-            async for signal in self._capture_rf_body(
+            body = self._capture_rf_body(
                 window, frequency, stop_after_first, poll_interval, rearm_interval
-            ):
-                yield signal
+            )
+            async with contextlib.aclosing(body):
+                async for signal in body:
+                    yield signal
         finally:
             self._release_window()
 

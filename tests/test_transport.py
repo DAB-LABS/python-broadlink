@@ -631,6 +631,25 @@ def test_failed_reauth_returns_the_original_reply(net):
         e.check_error(resp[0x22:0x24])
 
 
+def test_timeout_during_reauth_is_reported_as_a_timeout(net):
+    """If the device answers the request with an expired-key code and then
+    goes silent during the re-authentication, that is a network failure and
+    is raised as one, not returned as the device's original answer."""
+    dev = fixed_device()
+    dev.timeout = 0.03
+
+    async def go():
+        await dev._endpoint()
+        ep = net.endpoints[-1]
+        ep.replies = [(make_response(dev, b"", error=0xFFF9), HOST)]  # then silence
+        with pytest.raises(e.NetworkTimeoutError):
+            await dev.send_packet(0x6A, b"")
+        return [int.from_bytes(f[0x26:0x28], "little") for f, _ in ep.sent]
+
+    types = run(go())
+    assert types[0] == 0x6A and set(types[1:]) == {0x65}  # auth was tried and resent
+
+
 def test_locked_device_surfaces_as_the_original_error(net):
     """Device locked in the app: request answered -7, auth answered -1. The
     caller gets the -7 frame back (its check_error raises
