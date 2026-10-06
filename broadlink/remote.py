@@ -158,6 +158,64 @@ def parse_packet(data: bytes, tick: float = TICK) -> ParsedPacket:
     return ParsedPacket(kind, data[0x01], tuple(data_to_pulses(data, tick)), data[0x00])
 
 
+RM4_RF_TYPE = 0xB1
+"""Type byte an RM4 Pro returns for a 433 MHz RF capture."""
+
+_RM4_RF_HEADER_LEN = 8
+"""Type, repeat, payload length (LE) and the carrier in kHz (LE, 4 bytes).
+
+Two RM4 Pro captures seen so far hold 433840 and 433920 here, so the
+timings of an 0xB1 packet start at offset 8, not 4.
+"""
+
+_LONG_GAP_TICKS = 100
+"""About 3 ms: longer than any data pulse, shorter than an inter-frame gap."""
+
+
+def realign_rf_packet(packet: bytes) -> bytes:
+    """Undo an RM4 Pro RF capture that started in the middle of a pulse.
+
+    The timings of an 0xB1 packet alternate carrier on and carrier off,
+    starting with on. The RM4 Pro sometimes starts recording mid-pulse,
+    which shifts every timing by one slot: replayed as is, the device
+    transmits during the gaps between repeated frames and stays silent
+    during the data, and receivers ignore it (home-assistant/core#176041).
+
+    In an aligned capture the long gaps between frames sit on carrier-off
+    (odd) slots. If there are at least two timings of ``_LONG_GAP_TICKS``
+    or more and all of them sit on carrier-on (even) slots, the first
+    timing is dropped and the length field adjusted. Any other packet,
+    including every type other than 0xB1, is returned unchanged.
+    """
+    if len(packet) <= _RM4_RF_HEADER_LEN or packet[0x00] != RM4_RF_TYPE:
+        return packet
+
+    end = min(4 + int.from_bytes(packet[0x02:0x04], "little"), len(packet))
+    offsets: list[int] = []
+    gaps: list[int] = []
+    index = _RM4_RF_HEADER_LEN
+    while index < end:
+        offsets.append(index)
+        ticks = packet[index]
+        index += 1
+        if ticks == 0:
+            if index + 2 > end:
+                return packet
+            ticks = int.from_bytes(packet[index : index + 2], "big")
+            index += 2
+        if ticks >= _LONG_GAP_TICKS:
+            gaps.append(len(offsets) - 1)
+
+    if len(gaps) < 2 or any(slot % 2 for slot in gaps):
+        return packet
+
+    drop = offsets[1] - offsets[0]
+    fixed = bytearray(packet[: offsets[0]] + packet[offsets[1] :])
+    length = int.from_bytes(packet[0x02:0x04], "little") - drop
+    fixed[0x02:0x04] = length.to_bytes(2, "little")
+    return bytes(fixed)
+
+
 @dataclass(frozen=True)
 class CapturedSignal:
     """One signal captured by a universal remote.
@@ -279,8 +337,12 @@ class rmmini(Device):
         await self._send(0x3)
 
     async def check_data(self) -> bytes:
-        """Return the last captured code."""
-        return await self._send(0x4)
+        """Return the last captured code.
+
+        An RM4 Pro RF capture that started mid-pulse is realigned (see
+        ``realign_rf_packet``) so the code replays as it was received.
+        """
+        return realign_rf_packet(await self._send(0x4))
 
     def capture(
         self,
