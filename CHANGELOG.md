@@ -3,6 +3,17 @@
 All notable changes to this project are recorded here. The format follows
 Keep a Changelog; versions follow Semantic Versioning.
 
+## Unreleased
+
+### Fixed
+
+- An RM4 Pro RF capture (type 0xB1) that started in the middle of a pulse
+  is realigned by `check_data`, and so by `capture_rf`. Every timing was
+  shifted by one slot, so the replayed code transmitted during the gaps
+  between frames and receivers ignored it (home-assistant/core#176041).
+  The new `realign_rf_packet` drops the stray first timing only when all
+  long gaps sit on carrier-on slots; other packets are unchanged.
+
 ## 1.0.6 - 2026-09-06
 
 Small items from a sixth review, of 1.0.5, which found no defect in the
