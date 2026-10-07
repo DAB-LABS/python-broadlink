@@ -3,7 +3,11 @@
 All notable changes to this project are recorded here. The format follows
 Keep a Changelog; versions follow Semantic Versioning.
 
-## Unreleased
+## 1.1.0 - 2026-10-07
+
+RF packets as the RM4 Pro really returns them, a way to take a device out
+of learning mode, and capture windows that slide. Tested on an RM4 Pro
+with a second device listening on 433.92 MHz to what it transmits.
 
 ### Fixed
 
@@ -13,6 +17,37 @@ Keep a Changelog; versions follow Semantic Versioning.
   between frames and receivers ignored it (home-assistant/core#176041).
   The new `realign_rf_packet` drops the stray first timing only when all
   long gaps sit on carrier-on slots; other packets are unchanged.
+  Contributed by dustinreed-info (#12).
+- The timings of an RM4 Pro RF capture are read from offset 8. Bytes 4 to
+  7 of an 0xB1 packet hold the carrier in kHz, and `data_to_pulses` was
+  reading them as two timings of about 1.2 s and 90 ms and swallowing the
+  first two real ones. Packets built by `pulses_to_data` (0xB2, 0xD7) and
+  IR packets are read as before. Spotted by dustinreed-info in #12.
+
+### Added
+
+- `rf_carrier_mhz(packet)` returns the carrier an 0xB1 packet records, and
+  `ParsedPacket.frequency_mhz` carries it. `CapturedSignal.frequency_mhz`
+  now reports the carrier recorded in the packet when there is one (the
+  device transmits on that value when the packet is sent back), and the
+  frequency the window was given or swept to otherwise.
+- `cancel_learning()` on every RM model takes the device out of learning
+  mode, IR or RF, sweep included. It is command 0x1E, so far known here as
+  `cancel_sweep_frequency()`, which stays as the same call.
+- `extend_on_signal` on `capture()` and `capture_rf()`: each signal
+  restarts the window's countdown, so it closes `window` seconds after the
+  last signal.
+
+### Changed
+
+- A capture window sends `cancel_learning()` when it closes, for any
+  reason, so the device stops listening instead of holding the next press
+  until its own timeout. The cancel is best-effort, waits at most two
+  seconds, and a failure is only logged. Closing during an RF sweep
+  cancels the sweep through the same call, so a sweep that times out sends
+  one cancel, not two.
+- Docstrings no longer say an RF packet does not record its carrier, and
+  say that byte 1 of an 0xB1 packet is not a repeat count.
 
 ## 1.0.6 - 2026-09-06
 

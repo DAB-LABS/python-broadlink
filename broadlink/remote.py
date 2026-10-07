@@ -38,6 +38,13 @@ session, while ``check_data`` keeps answering with the same "nothing yet"
 error, so an open window has to re-arm on a timer and after every send.
 """
 
+_CANCEL_TIMEOUT = 2.0
+"""Seconds a closing capture window waits for ``cancel_learning``.
+
+Long enough for one resend on a slow network, short enough that closing a
+window on an unreachable device does not hang.
+"""
+
 
 class SignalKind(enum.IntEnum):
     """The kind of signal a packet carries.
@@ -76,6 +83,38 @@ class SignalKind(enum.IntEnum):
         raise ValueError(f"Unknown packet type 0x{type_byte:02x}")
 
 
+RM4_RF_TYPE = 0xB1
+"""Type byte an RM4 Pro returns for a 433 MHz RF capture."""
+
+_RM4_RF_HEADER_LEN = 8
+"""Type, byte 1, payload length (LE) and the carrier in kHz (LE, 4 bytes).
+
+An 0xB1 packet carries the carrier it was learned on at offsets 4 to 7
+(433920 or 433840 in every capture seen so far), so its timings start at
+offset 8, not 4. The device reads that field on send: the same packet with
+315000 there is not transmitted at 433.92 MHz (bench, 2026-10-06). Byte 1
+is not a repeat count either: it reads 0xC0 in every capture, and the
+device transmits nothing if it is changed to 0.
+"""
+
+
+def _timings_offset(data: bytes) -> int:
+    """Offset of the first timing: 8 for an RM4 Pro RF capture, else 4."""
+    return _RM4_RF_HEADER_LEN if data[0x00] == RM4_RF_TYPE else 4
+
+
+def rf_carrier_mhz(data: bytes) -> float | None:
+    """The carrier an RM4 Pro RF capture (0xB1) was learned on, in MHz.
+
+    Returns None for any other packet, including the 0xB2 and 0xD7 packets
+    ``pulses_to_data`` builds, which have no carrier field.
+    """
+    if len(data) < _RM4_RF_HEADER_LEN or data[0x00] != RM4_RF_TYPE:
+        return None
+    khz = int.from_bytes(data[0x04:0x08], "little")
+    return khz / 1000 if khz else None
+
+
 def pulses_to_data(
     pulses: list[int],
     tick: float = TICK,
@@ -110,9 +149,17 @@ def pulses_to_data(
 
 
 def data_to_pulses(data: bytes, tick: float = TICK) -> list[int]:
-    """Parse a Broadlink packet into a microsecond duration sequence."""
+    """Parse a Broadlink packet into a microsecond duration sequence.
+
+    The timings of an RM4 Pro RF capture (type 0xB1) start after its
+    carrier field, at offset 8; every other packet's start at offset 4.
+    """
+    if len(data) < 4:
+        raise ValueError("Malformed data.")
     result = []
-    index = 4
+    index = _timings_offset(data)
+    if index > len(data):
+        raise ValueError("Malformed data.")
     end = min(256 * data[0x03] + data[0x02] + 4, len(data))
 
     while index < end:
@@ -138,12 +185,16 @@ class ParsedPacket:
     ``type_byte`` is the packet's raw first byte; ``kind`` is that byte
     classified into a band (see ``SignalKind.classify``), which for a
     device-returned RF packet is not always the canonical value.
+    ``frequency_mhz`` is the carrier an RM4 Pro RF capture (0xB1) records,
+    and None for every other packet. ``repeat`` is byte 1 as read; in an
+    0xB1 packet it is not a repeat count (see ``RM4_RF_TYPE``).
     """
 
     kind: SignalKind
     repeat: int
     pulses: tuple[int, ...]
     type_byte: int
+    frequency_mhz: float | None = None
 
 
 def parse_packet(data: bytes, tick: float = TICK) -> ParsedPacket:
@@ -155,18 +206,14 @@ def parse_packet(data: bytes, tick: float = TICK) -> ParsedPacket:
     if len(data) < 4:
         raise ValueError("Malformed data.")
     kind = SignalKind.classify(data[0x00])
-    return ParsedPacket(kind, data[0x01], tuple(data_to_pulses(data, tick)), data[0x00])
+    return ParsedPacket(
+        kind,
+        data[0x01],
+        tuple(data_to_pulses(data, tick)),
+        data[0x00],
+        rf_carrier_mhz(data),
+    )
 
-
-RM4_RF_TYPE = 0xB1
-"""Type byte an RM4 Pro returns for a 433 MHz RF capture."""
-
-_RM4_RF_HEADER_LEN = 8
-"""Type, repeat, payload length (LE) and the carrier in kHz (LE, 4 bytes).
-
-Two RM4 Pro captures seen so far hold 433840 and 433920 here, so the
-timings of an 0xB1 packet start at offset 8, not 4.
-"""
 
 _LONG_GAP_TICKS = 100
 """About 3 ms: longer than any data pulse, shorter than an inter-frame gap."""
@@ -225,8 +272,11 @@ class CapturedSignal:
     corrected tick. ``kind`` is the band the signal was captured on;
     ``type_byte`` is the packet's raw first byte, which for RF is not always
     the canonical value for the band. ``frequency_mhz`` is set for RF
-    captures only and holds the carrier the device swept to or was given,
-    which the packet itself does not record.
+    captures only: the carrier the packet records when it has one (an RM4
+    Pro's 0xB1 captures do, and that is the carrier the device transmits on
+    when the packet is sent back), otherwise the carrier the window was
+    given or swept to. ``repeat`` is the packet's byte 1; in an 0xB1 packet
+    that is not a repeat count, so leave it as the device returned it.
     """
 
     packet: bytes
@@ -251,7 +301,8 @@ class CapturedSignal:
         capture window knows what it armed, so it passes the kind it armed
         for and a signal is never dropped over an unexpected type byte; the
         raw byte is still kept in ``type_byte``. The timings are read from
-        the packet regardless of the type byte.
+        the packet regardless of the type byte. A carrier recorded in the
+        packet takes precedence over ``frequency_mhz``.
         """
         if len(packet) < 4:
             raise ValueError("Malformed data.")
@@ -263,7 +314,7 @@ class CapturedSignal:
             kind,
             tuple(data_to_pulses(packet)),
             packet[0x01],
-            frequency_mhz,
+            rf_carrier_mhz(packet) or frequency_mhz,
             type_byte,
         )
 
@@ -336,6 +387,26 @@ class rmmini(Device):
         """Enter infrared learning mode."""
         await self._send(0x3)
 
+    async def cancel_learning(self) -> None:
+        """Take the device out of learning mode, IR or RF, sweep included.
+
+        Command 0x1E, long known here only as ``cancel_sweep_frequency``. On
+        an RM4 Pro (firmware 52079) it also ends an infrared learning
+        session at once (bench, 2026-09-07), and other Broadlink client
+        libraries send it as their general cancel. The device does not
+        confirm it, and it is not verified on models other than the RM4
+        Pro. Capture windows send it themselves when they close.
+        """
+        await self._send(0x1E)
+
+    async def _end_learning(self) -> None:
+        """Best-effort ``cancel_learning`` for a closing window; never raises."""
+        try:
+            async with asyncio.timeout(_CANCEL_TIMEOUT):
+                await self.cancel_learning()
+        except (e.BroadlinkException, OSError, TimeoutError) as err:
+            _LOGGER.debug("%s: cancel on window close failed: %s", self.host[0], err)
+
     async def check_data(self) -> bytes:
         """Return the last captured code.
 
@@ -349,6 +420,7 @@ class rmmini(Device):
         window: float = 30.0,
         *,
         stop_after_first: bool = True,
+        extend_on_signal: bool = False,
         poll_interval: float = DEFAULT_POLL_INTERVAL,
         rearm_interval: float = DEFAULT_REARM_INTERVAL,
     ) -> AsyncGenerator[CapturedSignal]:
@@ -359,14 +431,18 @@ class rmmini(Device):
         ``CapturedSignal``. With ``stop_after_first`` the window closes
         after the first code; otherwise the device is re-armed after each
         code (it holds one code per learning session) and the window stays
-        open until ``window`` seconds have passed. ``window=0`` keeps it
-        open until the generator is closed.
+        open until ``window`` seconds have passed. With ``extend_on_signal``
+        each signal restarts that countdown, so the window closes ``window``
+        seconds after the last signal rather than after the first arm.
+        ``window=0`` keeps it open until the generator is closed.
 
         The device leaves learning mode on its own after a while without
         saying so, so the window re-arms it every ``rearm_interval`` seconds
-        and after every ``send_data`` on the same device. Closing the
-        generator sends nothing further; the device times out by itself.
-        Use ``contextlib.aclosing`` (or iterate to the end) so the window is
+        and after every ``send_data`` on the same device. When the window
+        closes, for any reason, it sends ``cancel_learning`` so the device
+        stops listening instead of holding the next press until its own
+        timeout; that is best-effort and a failure is only logged. Use
+        ``contextlib.aclosing`` (or iterate to the end) so the window is
         released promptly. Only one capture window can be open per device:
         opening one while another is still held raises
         ``CaptureInProgressError`` on its first iteration. A window whose
@@ -382,6 +458,7 @@ class rmmini(Device):
             SignalKind.IR,
             None,
             claim=True,
+            extend=window if extend_on_signal else None,
         )
 
     async def _capture_loop(
@@ -395,9 +472,11 @@ class rmmini(Device):
         frequency_mhz: float | None,
         *,
         claim: bool,
+        extend: float | None = None,
     ) -> AsyncGenerator[CapturedSignal]:
         # ``claim`` is False when the caller already holds the window, as
-        # capture_rf does for its inner loop.
+        # capture_rf does for its inner loop; the caller then also sends the
+        # cancel when its own window closes.
         if window < 0:
             raise ValueError("window must be 0 (open-ended) or positive")
         if poll_interval <= 0 or rearm_interval <= 0:
@@ -413,13 +492,19 @@ class rmmini(Device):
                 rearm_interval,
                 kind,
                 frequency_mhz,
+                extend,
             )
             async with contextlib.aclosing(body):
                 async for signal in body:
                     yield signal
         finally:
             if claim:
-                self._release_window()
+                # Cancel before releasing, so the cancel cannot land on a
+                # window opened right after this one.
+                try:
+                    await self._end_learning()
+                finally:
+                    self._release_window()
 
     async def _capture_body(
         self,
@@ -430,6 +515,7 @@ class rmmini(Device):
         rearm_interval: float,
         kind: SignalKind,
         frequency_mhz: float | None,
+        extend: float | None = None,
     ) -> AsyncGenerator[CapturedSignal]:
         loop = asyncio.get_running_loop()
         deadline = loop.time() + window if window else None
@@ -484,6 +570,8 @@ class rmmini(Device):
                     yield signal
                     if stop_after_first:
                         return
+                    if extend and deadline is not None:
+                        deadline = loop.time() + extend
                     generation = -1  # One code per session: re-arm.
 
             now = loop.time()
@@ -518,8 +606,8 @@ class rmpro(rmmini):
         await self._send(0x1B, payload)
 
     async def cancel_sweep_frequency(self) -> None:
-        """Cancel sweep frequency."""
-        await self._send(0x1E)
+        """Cancel sweep frequency. The same command as ``cancel_learning``."""
+        await self.cancel_learning()
 
     def capture_rf(
         self,
@@ -527,6 +615,7 @@ class rmpro(rmmini):
         *,
         frequency: float | None = None,
         stop_after_first: bool = True,
+        extend_on_signal: bool = False,
         poll_interval: float = DEFAULT_POLL_INTERVAL,
         rearm_interval: float = DEFAULT_REARM_INTERVAL,
     ) -> AsyncGenerator[CapturedSignal]:
@@ -539,15 +628,21 @@ class rmpro(rmmini):
         sweep is unreliable on some firmware and can report a carrier it
         never really locked, so pass the frequency whenever it is known.
 
-        The window, polling, re-arm and stop-after-first semantics are those
-        of ``capture``; the sweep counts against the same ``window``. A
-        ``send_data`` during the sweep restarts it. Closing the generator
-        during a sweep sends nothing; the device ends the sweep on its own.
-        Each ``CapturedSignal`` carries the carrier in ``frequency_mhz``,
-        which the packet itself does not record.
+        The window, polling, re-arm, stop-after-first, extend-on-signal and
+        cancel-on-close semantics are those of ``capture``; the sweep counts
+        against the same ``window``, and closing the window during a sweep
+        cancels the sweep. A ``send_data`` during the sweep restarts it.
+        Each ``CapturedSignal`` carries the carrier in ``frequency_mhz``:
+        the one recorded in the packet when the device includes it (the RM4
+        Pro does), otherwise ``frequency`` or the carrier the sweep found.
         """
         return self._capture_rf_loop(
-            window, frequency, stop_after_first, poll_interval, rearm_interval
+            window,
+            frequency,
+            stop_after_first,
+            poll_interval,
+            rearm_interval,
+            window if extend_on_signal else None,
         )
 
     async def _capture_rf_loop(
@@ -557,19 +652,23 @@ class rmpro(rmmini):
         stop_after_first: bool,
         poll_interval: float,
         rearm_interval: float,
+        extend: float | None,
     ) -> AsyncGenerator[CapturedSignal]:
         if window < 0 or poll_interval <= 0:
             raise ValueError("window must be 0 or positive, poll_interval positive")
         await self._claim_window()
         try:
             body = self._capture_rf_body(
-                window, frequency, stop_after_first, poll_interval, rearm_interval
+                window, frequency, stop_after_first, poll_interval, rearm_interval, extend
             )
             async with contextlib.aclosing(body):
                 async for signal in body:
                     yield signal
         finally:
-            self._release_window()
+            try:
+                await self._end_learning()
+            finally:
+                self._release_window()
 
     async def _capture_rf_body(
         self,
@@ -578,6 +677,7 @@ class rmpro(rmmini):
         stop_after_first: bool,
         poll_interval: float,
         rearm_interval: float,
+        extend: float | None,
     ) -> AsyncGenerator[CapturedSignal]:
         loop = asyncio.get_running_loop()
         deadline = loop.time() + window if window else None
@@ -604,6 +704,7 @@ class rmpro(rmmini):
             kind,
             frequency,
             claim=False,
+            extend=extend,
         )
         async with contextlib.aclosing(inner):
             async for signal in inner:
@@ -618,8 +719,7 @@ class rmpro(rmmini):
         while True:
             now = loop.time()
             if deadline is not None and now >= deadline:
-                await self.cancel_sweep_frequency()
-                return None
+                return None  # The window's close cancels the sweep.
             delay = poll_interval
             if deadline is not None:
                 delay = min(delay, deadline - now)

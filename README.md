@@ -270,10 +270,15 @@ Universal remotes with product id 0x2712 use the same method for learning IR and
 
 ### Canceling learning
 
-You can exit the learning mode in the middle of the process by calling this method:
+You can take the device out of learning mode, IR or RF, including the RF
+frequency sweep, by calling:
 ```python3
-await device.cancel_sweep_frequency()
+await device.cancel_learning()
 ```
+`cancel_sweep_frequency()` sends the same command and is kept for existing
+code. The device does not confirm the cancel. It is tested on an RM4 Pro;
+other models may ignore it, in which case they leave learning mode on their
+own after a while.
 
 ### Capturing signals
 
@@ -292,7 +297,12 @@ async with aclosing(device.capture(window=30)) as signals:
 By default the window closes after the first signal. Pass
 `stop_after_first=False` to keep it open for the whole `window` (in seconds;
 `window=0` runs until the generator is closed), re-arming after each signal
-because the device holds only one code per learning session. A universal
+because the device holds only one code per learning session. Add
+`extend_on_signal=True` to make the window close `window` seconds after the
+last signal instead of after the first arm, so it stays open while signals
+keep coming. When a window closes, for whatever reason, it sends
+`cancel_learning()` so the device stops listening right away instead of
+swallowing the next press until it times out on its own. A universal
 remote has a single receiver, so only one capture window can be open on a
 device at a time: opening a second one raises `CaptureInProgressError`
 from the new window's first iteration while the first is still held.
@@ -302,8 +312,13 @@ the generator.
 
 `CapturedSignal` carries the device's own `packet` bytes (ready for
 `send_data`), the decoded `pulses` in microseconds at the corrected tick, the
-`kind` (`SignalKind.IR`, `RF_433` or `RF_315`), the `repeat` count, and for
-RF the `frequency_mhz` the packet itself does not record.
+`kind` (`SignalKind.IR`, `RF_433` or `RF_315`), the `repeat` byte, and for
+RF the carrier in `frequency_mhz`. An RM4 Pro records the carrier inside its
+RF packets (type 0xB1) and transmits on it when the packet is sent back, so
+`frequency_mhz` reports that value when it is there and the frequency the
+window was given or swept to otherwise. In an 0xB1 packet the `repeat` byte
+is not a repeat count: leave it as the device returned it. `parse_packet()`
+and `rf_carrier_mhz()` read the same field from a stored packet.
 
 RF works the same way on the Pro models, with the carrier as the one extra
 input:
