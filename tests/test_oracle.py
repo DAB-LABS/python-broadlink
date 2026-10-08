@@ -48,6 +48,10 @@ def test_every_public_method_is_covered() -> None:
     # Capture windows drive several requests over time; they are covered
     # with a scripted device in test_capture.py.
     transport_level |= {"capture", "capture_rf"}
+    # New in this library, so 0.19.0 has nothing to record. It sends the
+    # request 0.19.0's cancel_sweep_frequency sends, checked below against
+    # that method's fixtures.
+    transport_level |= {"cancel_learning"}
     missing = []
     for name, cls in inspect.getmembers(broadlink, inspect.isclass):
         if not issubclass(cls, Device):
@@ -63,3 +67,17 @@ def test_every_public_method_is_covered() -> None:
             if (name, meth) not in covered:
                 missing.append(f"{name}.{meth}")
     assert not missing, f"public methods without an oracle case: {missing}"
+
+
+CANCEL_SWEEP_ENTRIES = [
+    e for e in ENTRIES if e["case"]["method"] == "cancel_sweep_frequency"
+]
+
+
+@pytest.mark.parametrize(
+    "entry", CANCEL_SWEEP_ENTRIES, ids=[e["case"]["cls"] for e in CANCEL_SWEEP_ENTRIES]
+)
+def test_cancel_learning_sends_what_cancel_sweep_frequency_sent(entry: dict) -> None:
+    """cancel_learning is 0.19.0's cancel_sweep_frequency request, byte for byte."""
+    case = dict(entry["case"], method="cancel_learning")
+    assert run_case(case)["sent"] == entry["expect"]["sent"]

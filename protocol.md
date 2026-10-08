@@ -188,6 +188,30 @@ then it is stored big endian with a leading 0.
 
 Captures of IR codes from the device will always end with a constant OFF value of `0x00 0x0d 0x05` but the trailing silence can be anything on transmit. The likely reason for this value is a capped timeout value on detection. The value is about 102 milliseconds.
 
+RF codes an RM4 Pro returns from learning use a different layout. Offsets
+below are within the code itself, so add 4 for the payload above:
+
+|Offset|Contents|
+|------|--------|
+|0x00|0xb1 for a 433MHz capture|
+|0x01|0xc0 in every capture seen; not a repeat count (the device sends nothing if it is changed to 0)|
+|0x02-0x03|Length of the following data in little endian, counting the carrier field|
+|0x04-0x07|Carrier frequency in kHz, little endian (for example 433920)|
+|0x08 ....|Pulse lengths, encoded as above, paired as ON, OFF|
+
+The device reads the carrier field when the code is sent back: the same
+code with 315000 there is not transmitted at 433.92MHz. A code built with
+0xb2 and no carrier field, as described above, is also accepted and sent at
+433.92MHz. Tested on an RM4 Pro, firmware 52079.
+
+Leaving learning mode
+---------------------
+
+Command 0x1e (payload offset 0x00, no data) ends a learning session, IR or
+RF, including the RF frequency sweep. The device does not reply with
+anything to show it worked; afterwards `check_data` reports nothing until
+learning is entered again.
+
 Example: The header for my Optoma projector is 8920 4450  
 8920 * 269 / 8192 = 0x124  
 4450 * 269 / 8192 = 0x92  

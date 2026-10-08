@@ -17,16 +17,26 @@ import pytest
 import broadlink
 from broadlink import exceptions as e
 from broadlink.remote import (
+    TICK,
     CapturedSignal,
     SignalKind,
     data_to_pulses,
     parse_packet,
     pulses_to_data,
+    rf_carrier_mhz,
 )
 from tests.oracle.harness import HOST, MAC, make_response
 
 IR = pulses_to_data([9000, 4500, 560, 560, 560, 1690])
 RF = pulses_to_data([300, 900, 300, 900], kind=SignalKind.RF_433)
+
+
+def rm4_rf(timings: bytes, carrier_khz: int = 433920) -> bytes:
+    """An RF packet laid out as an RM4 Pro returns it: 0xB1, byte 1 0xC0,
+    the length, the carrier in kHz, then the timings."""
+    body = carrier_khz.to_bytes(4, "little") + timings
+    return bytes([0xB1, 0xC0]) + len(body).to_bytes(2, "little") + body
+
 
 CMD_SEND = 0x02
 CMD_LEARN = 0x03
@@ -34,7 +44,7 @@ CMD_CHECK = 0x04
 CMD_SWEEP = 0x19
 CMD_CHECK_FREQ = 0x1A
 CMD_FIND_RF = 0x1B
-CMD_CANCEL_SWEEP = 0x1E
+CMD_CANCEL_SWEEP = 0x1E  # Also cancel_learning, sent when a window closes.
 
 
 class FakeRM:
@@ -51,6 +61,8 @@ class FakeRM:
         self.sweep_answers: list[tuple[bool, float]] = []
         self.timeouts_to_raise = 0
         self.nothing_yet_code = -5  # -10 on some older firmware
+        self.cancel_error: int | str | None = None
+        self.cancel_seen_while_claimed: list[bool] = []
         device.send_packet = self.send_packet  # type: ignore[method-assign]
 
     # -- what the test does to the device
@@ -109,6 +121,10 @@ class FakeRM:
             return b"", 0
         if command == CMD_CANCEL_SWEEP:
             self.sweeping = False
+            self.armed = False
+            self.cancel_seen_while_claimed.append(self.device.capture_active)
+            if self.cancel_error is not None:
+                return b"", self.cancel_error
             return b"", 0
         if command == CMD_CHECK_FREQ:
             found, freq = (
@@ -311,7 +327,7 @@ def test_open_ended_window_runs_until_closed():
     assert len(got) == 1
     assert device.capture_active is False
     # Closing sends nothing further to the device.
-    assert fake.commands[-1][0] in (CMD_CHECK, CMD_LEARN)
+    assert fake.commands[-1][0] == CMD_CANCEL_SWEEP  # Closing cancels learning.
 
 
 def test_second_window_is_refused():
@@ -533,7 +549,7 @@ def test_capture_rf_yields_despite_odd_type_byte():
     # The device returns 0xB1 for 433 MHz; the window armed RF, so it tags
     # the signal RF_433 from context and does not choke on the byte.
     device, fake = make()
-    odd = bytes([0xB1]) + RF[1:]
+    odd = rm4_rf(RF[4:])
 
     async def go():
         asyncio.get_running_loop().create_task(press_later(fake, odd, 3 * UNIT))
@@ -574,7 +590,8 @@ def test_capture_rf_sweeps_then_learns():
     find = kinds.index(CMD_FIND_RF)
     assert find > kinds.index(CMD_CHECK_FREQ)
     assert fake.commands[find][1] == struct.pack("<I", 433920)
-    assert fake.count(CMD_CANCEL_SWEEP) == 0
+    assert fake.count(CMD_CANCEL_SWEEP) == 1  # Only the close.
+    assert fake.commands[-1][0] == CMD_CANCEL_SWEEP
 
 
 def test_capture_rf_sweep_that_never_locks_is_cancelled():
@@ -686,16 +703,19 @@ def test_classify_tolerates_the_rf_bytes_the_device_sends():
 
 
 def test_parse_packet_keeps_raw_type_byte():
-    packet = bytes([0xB1, 0, 2, 0, 10, 20])
+    packet = rm4_rf(bytes([10, 20]))
     parsed = parse_packet(packet)
     assert parsed.kind is SignalKind.RF_433
     assert parsed.type_byte == 0xB1
+    assert parsed.repeat == 0xC0
+    assert parsed.frequency_mhz == 433.92
+    assert parsed.pulses == (int(10 * TICK), int(20 * TICK))
 
 
 def test_from_packet_kind_override_never_drops_a_signal():
     # A capture window passes the band it armed; an unexpected type byte
     # must not raise, and the raw byte is preserved.
-    weird = bytes([0xB1, 0, 2, 0, 10, 20])
+    weird = rm4_rf(bytes([10, 20]))
     sig = CapturedSignal.from_packet(weird, 433.92, kind=SignalKind.RF_433)
     assert sig.kind is SignalKind.RF_433
     assert sig.type_byte == 0xB1
@@ -725,3 +745,171 @@ def test_captured_signal_from_packet():
     assert sig.pulses == tuple(data_to_pulses(RF))
     assert sig.frequency_mhz == 433.92
     assert sig.captured_at > 0
+
+
+# -- RM4 Pro RF packets carry their carrier (bench, test 005) --------------
+
+
+def test_rm4_rf_timings_start_after_the_carrier():
+    # The head of a real RM4 Pro capture of a 433.92 MHz PT2262 code.
+    packet = bytes.fromhex("b1c00c00009f06000b210d21")
+    assert data_to_pulses(packet) == [int(t * TICK) for t in (11, 33, 13, 33)]
+
+
+def test_rf_carrier_mhz_reads_only_rm4_rf_packets():
+    assert rf_carrier_mhz(rm4_rf(b"\x0b\x21")) == 433.92
+    assert rf_carrier_mhz(rm4_rf(b"\x0b\x21", carrier_khz=433840)) == 433.84
+    assert rf_carrier_mhz(rm4_rf(b"\x0b\x21", carrier_khz=0)) is None
+    assert rf_carrier_mhz(RF) is None  # Built 0xB2 packets have no field.
+    assert rf_carrier_mhz(IR) is None
+    assert rf_carrier_mhz(b"\xb1\xc0") is None
+
+
+def test_built_rf_packets_still_parse_from_offset_4():
+    expected = [int(round(t / TICK) * TICK) for t in (300, 900, 300, 900)]
+    assert data_to_pulses(RF) == expected
+    assert parse_packet(RF).frequency_mhz is None
+
+
+@pytest.mark.parametrize("packet", [b"\xb1\xc0\x02\x00\x0a\x14", b"\xb1\xc0"])
+def test_short_rm4_rf_packet_is_malformed(packet):
+    with pytest.raises(ValueError):
+        data_to_pulses(packet)
+    with pytest.raises(ValueError):
+        parse_packet(packet)
+
+
+def test_packet_carrier_wins_over_the_armed_frequency():
+    # The device transmits on the carrier the packet records, so report that.
+    sig = CapturedSignal.from_packet(rm4_rf(b"\x0b\x21", carrier_khz=433840), 433.92)
+    assert sig.frequency_mhz == 433.84
+
+
+# -- cancel_learning and cancel on close ------------------------------------
+
+
+@pytest.mark.parametrize("cls_name", ["rmmini", "rmminib", "rm4pro", "rm5plus"])
+def test_cancel_learning_sends_0x1e(cls_name):
+    device, fake = make(cls_name)
+    run(device.cancel_learning())
+    assert fake.commands == [(CMD_CANCEL_SWEEP, b"")]
+
+
+def test_cancel_sweep_frequency_is_cancel_learning():
+    device, fake = make("rmpro", 0x2787)
+    run(device.cancel_sweep_frequency())
+    assert fake.commands == [(CMD_CANCEL_SWEEP, b"")]
+
+
+def test_window_closed_after_first_signal_cancels_once():
+    device, fake = make()
+
+    async def go():
+        asyncio.get_running_loop().create_task(press_later(fake, IR, 2 * UNIT))
+        return [s async for s in device.capture(window=1, **FAST)]
+
+    assert len(run(go())) == 1
+    assert fake.count(CMD_CANCEL_SWEEP) == 1
+    assert fake.commands[-1][0] == CMD_CANCEL_SWEEP
+
+
+def test_window_that_elapses_cancels_once():
+    device, fake = make()
+
+    async def go():
+        return [s async for s in device.capture(window=3 * UNIT, **FAST)]
+
+    assert run(go()) == []
+    assert fake.count(CMD_CANCEL_SWEEP) == 1
+
+
+def test_window_closed_early_cancels_before_releasing():
+    device, fake = make()
+
+    async def go():
+        async with aclosing(device.capture(window=0, **FAST)) as signals:
+            task = asyncio.ensure_future(anext(signals))
+            await asyncio.sleep(3 * UNIT)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        return device.capture_active
+
+    assert run(go()) is False
+    assert fake.count(CMD_CANCEL_SWEEP) == 1
+    # The cancel went out while the window still held the receiver, so it
+    # cannot land on a window opened right after this one.
+    assert fake.cancel_seen_while_claimed == [True]
+
+
+@pytest.mark.parametrize("error", [-3, "timeout"])
+def test_failed_cancel_does_not_break_the_close(error):
+    device, fake = make()
+    fake.cancel_error = error
+
+    async def go():
+        asyncio.get_running_loop().create_task(press_later(fake, IR, 2 * UNIT))
+        signals = [s async for s in device.capture(window=1, **FAST)]
+        return signals, device.capture_active
+
+    signals, active = run(go())
+    assert len(signals) == 1
+    assert active is False
+
+
+def test_rf_window_closed_cancels_once():
+    device, fake = make()
+
+    async def go():
+        asyncio.get_running_loop().create_task(press_later(fake, RF, 2 * UNIT))
+        return [s async for s in device.capture_rf(window=1, frequency=433.92, **FAST)]
+
+    assert len(run(go())) == 1
+    assert fake.count(CMD_CANCEL_SWEEP) == 1
+
+
+# -- extend_on_signal --------------------------------------------------------
+
+
+@pytest.mark.parametrize(("extend", "expected"), [(False, 1), (True, 3)])
+def test_extend_on_signal_restarts_the_countdown(extend, expected):
+    # Window of 10 units; presses 3, 12 and 20 units in. Fixed, the window
+    # is closed before the second press; sliding, each press keeps it open.
+    device, fake = make()
+
+    async def go():
+        loop = asyncio.get_running_loop()
+        for at in (3, 12, 20):
+            loop.create_task(press_later(fake, IR, at * UNIT))
+        return [
+            s
+            async for s in device.capture(
+                window=10 * UNIT,
+                stop_after_first=False,
+                extend_on_signal=extend,
+                **FAST,
+            )
+        ]
+
+    assert len(run(go())) == expected
+
+
+def test_extend_on_signal_applies_to_rf_windows():
+    device, fake = make()
+
+    async def go():
+        loop = asyncio.get_running_loop()
+        for at in (3, 12):
+            loop.create_task(press_later(fake, RF, at * UNIT))
+        return [
+            s
+            async for s in device.capture_rf(
+                window=10 * UNIT,
+                frequency=433.92,
+                stop_after_first=False,
+                extend_on_signal=True,
+                **FAST,
+            )
+        ]
+
+    assert len(run(go())) == 2
